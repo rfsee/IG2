@@ -1,0 +1,6 @@
+Status: GO
+Reconciliation Report
+Platform rows: 9
+Week rows (W1+W2): 9
+Missing in Platform data: 0
+Missing in Week CSVs: 0

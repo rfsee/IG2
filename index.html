@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IG 家具電商前台營運台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div class="wrap hero__inner">
+        <p class="eyebrow">IG Ops Console</p>
+        <h1>家具內容前台（不用再開 Sheet）</h1>
+        <p class="subtitle">直接在這裡做貼文與商品管理：新增、編輯、狀態更新、匯入匯出。</p>
+        <div class="toolbar">
+          <button id="add-post-btn" class="btn btn-primary" type="button">新增貼文</button>
+          <button id="add-product-btn" class="btn" type="button">新增商品</button>
+          <button id="export-posts-btn" class="btn" type="button">匯出貼文CSV</button>
+          <button id="export-products-btn" class="btn" type="button">匯出商品CSV</button>
+          <label class="btn file-btn">匯入貼文CSV<input id="import-posts" type="file" accept=".csv" hidden /></label>
+          <label class="btn file-btn">匯入商品CSV<input id="import-products" type="file" accept=".csv" hidden /></label>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap page">
+      <section class="kpi-grid" id="kpi-grid"></section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>狀態看板</h2>
+        </div>
+        <div class="panel-head">
+          <h3 id="weekly-products-title">本週主推商品</h3>
+        </div>
+        <div class="weekly-products" id="weekly-products"></div>
+        <div class="kanban" id="kanban"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head row-between">
+          <h2>貼文管理</h2>
+          <div class="filters">
+            <select id="filter-week">
+              <option value="all">全部檔期</option>
+              <option value="W1">W1</option>
+              <option value="W2">W2</option>
+              <option value="W3">W3</option>
+              <option value="W4">W4</option>
+            </select>
+            <select id="filter-type">
+              <option value="all">全部格式</option>
+              <option value="reels">Reels</option>
+              <option value="feed">Feed</option>
+            </select>
+            <select id="filter-status">
+              <option value="all">全部狀態</option>
+              <option value="草稿">草稿</option>
+              <option value="待拍">待拍</option>
+              <option value="待上架">待上架</option>
+              <option value="已發佈">已發佈</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>日期</th><th>格式</th><th>標題</th><th>商品連結</th><th>狀態</th><th>CTA</th><th>A/B</th><th>成效數據</th><th>操作</th></tr>
+            </thead>
+            <tbody id="posts-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>商品管理</h2></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>商品</th><th>價格</th><th>尺寸</th><th>賣點</th><th>連結</th><th>操作</th></tr>
+            </thead>
+            <tbody id="products-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>DM 轉單引擎</h2></div>
+        <div class="form-grid">
+          <label>來源貼文
+            <select id="dm-post-select"></select>
+          </label>
+          <label>客戶意圖
+            <select id="dm-intent-select">
+              <option value="price">價格</option>
+              <option value="size">尺寸</option>
+              <option value="material">材質</option>
+              <option value="shipping">配送</option>
+              <option value="style">風格</option>
+              <option value="other">其他</option>
+            </select>
+          </label>
+          <label class="full">客戶問題摘要<input id="dm-user-question" placeholder="例如：有沒有 2500 內、玄關可用的款式？" /></label>
+          <div class="actions full">
+            <button class="btn btn-primary" id="dm-generate-btn" type="button">生成 DM 腳本</button>
+            <button class="btn" id="dm-copy-btn" type="button">複製腳本</button>
+          </div>
+          <label class="full">DM 腳本<textarea id="dm-script-output" rows="6" readonly></textarea></label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>時間</th><th>貼文</th><th>意圖</th><th>推薦商品</th><th>階段</th><th>腳本</th></tr>
+            </thead>
+            <tbody id="dm-threads-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head row-between">
+          <h2>Growth Analyst 週報引擎</h2>
+          <div class="actions-inline">
+            <button class="btn btn-primary" id="weekly-report-btn" type="button">生成本週報告</button>
+            <button class="btn" id="weekly-report-copy-btn" type="button">複製報告</button>
+          </div>
+        </div>
+        <label>週報輸出<textarea id="weekly-report-output" rows="10" readonly></textarea></label>
+        <div class="panel-head"><h3>下週建議行動</h3></div>
+        <ul id="weekly-actions"></ul>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head row-between">
+          <h2>每日 15 分鐘 SOP</h2>
+          <button class="btn" id="sop-reset-btn" type="button">重置今日勾選</button>
+        </div>
+        <p class="subtitle">每天照這 6 步跑，確保內容、私訊、轉單都在推進。</p>
+        <ul id="sop-checklist"></ul>
+      </section>
+    </main>
+
+    <dialog id="post-dialog">
+      <form id="post-form" method="dialog" class="form-grid">
+        <h3 id="post-form-title">新增貼文</h3>
+        <input type="hidden" id="post-id" />
+        <label>日期<input id="post-date" required placeholder="03/10" /></label>
+        <label>格式
+          <select id="post-type"><option value="reels">Reels</option><option value="feed">Feed</option></select>
+        </label>
+        <label>檔期
+          <select id="post-week"><option value="W1">W1</option><option value="W2">W2</option><option value="W3">W3</option><option value="W4">W4</option></select>
+        </label>
+        <label>狀態
+          <select id="post-status"><option>草稿</option><option>待拍</option><option>待上架</option><option>已發佈</option></select>
+        </label>
+        <label class="full">標題<input id="post-title" required /></label>
+        <label class="full">腳本摘要<input id="post-script" /></label>
+        <label class="full">CTA<input id="post-cta" /></label>
+        <label class="full">商品連結<input id="post-link" /></label>
+        <label class="full">心理觸發標籤（逗號分隔）<input id="post-trigger-tags" placeholder="痛點, 證據, 價值, 緊迫, 安心" /></label>
+        <section class="full auto-block">
+          <div class="auto-head">
+            <strong>自動化文案（可直接複製）</strong>
+            <button class="btn" type="button" id="copy-caption-btn">複製文案</button>
+          </div>
+          <textarea id="post-auto-caption" rows="6" readonly></textarea>
+        </section>
+        <section class="full auto-block">
+          <div class="auto-head">
+            <strong>Nano Banana 圖片 Prompts（可直接複製）</strong>
+            <button class="btn" type="button" id="copy-image-prompt-btn">複製Prompt</button>
+          </div>
+          <textarea id="post-image-prompt" rows="6" readonly></textarea>
+        </section>
+        <section class="full auto-block">
+          <div class="auto-head">
+            <strong>A/B 實驗版本（自動生成）</strong>
+            <div class="actions-inline">
+              <button class="btn" type="button" id="copy-variant-a-btn">複製A</button>
+              <button class="btn" type="button" id="copy-variant-b-btn">複製B</button>
+            </div>
+          </div>
+          <label class="full">版本 A（效率導向）<textarea id="post-variant-a" rows="4" readonly></textarea></label>
+          <label class="full">版本 B（安心導向）<textarea id="post-variant-b" rows="4" readonly></textarea></label>
+        </section>
+        <div class="actions full">
+          <button class="btn btn-primary" type="submit">儲存</button>
+          <button class="btn" type="button" id="post-cancel">取消</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="experiment-dialog">
+      <form id="experiment-form" method="dialog" class="form-grid">
+        <h3>A/B 實驗結果</h3>
+        <input type="hidden" id="exp-post-id" />
+        <label class="full">貼文標題<input id="exp-post-title" readonly /></label>
+        <label class="full">假設（Hypothesis）<input id="exp-hypothesis" placeholder="例：強調價格帶比強調風格更能提高點擊" /></label>
+        <label class="full">版本 A<textarea id="exp-variant-a" rows="3" readonly></textarea></label>
+        <label>版本 A 分數<input id="exp-score-a" type="number" min="0" /></label>
+        <label class="full">版本 B<textarea id="exp-variant-b" rows="3" readonly></textarea></label>
+        <label>版本 B 分數<input id="exp-score-b" type="number" min="0" /></label>
+        <label>勝出版本
+          <select id="exp-winner">
+            <option value="pending">待判定</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+          </select>
+        </label>
+        <div class="actions full">
+          <button class="btn" type="button" id="exp-auto-pick">自動判定</button>
+          <button class="btn btn-primary" type="submit">儲存</button>
+          <button class="btn" type="button" id="exp-cancel">取消</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="product-dialog">
+      <form id="product-form" method="dialog" class="form-grid">
+        <h3 id="product-form-title">新增商品</h3>
+        <input type="hidden" id="product-id" />
+        <label>商品名稱<input id="product-name" required /></label>
+        <label>價格<input id="product-price" type="number" required /></label>
+        <label>尺寸<input id="product-size" /></label>
+        <label>材質<input id="product-material" /></label>
+        <label>照片名稱/網址<input id="product-photo-name" placeholder="example-product-01.jpg 或 https://.../image.jpg" /></label>
+        <label class="full">賣點<input id="product-selling" /></label>
+        <label class="full">連結<input id="product-link" /></label>
+        <label class="full">場景<input id="product-scene" /></label>
+        <div class="actions full">
+          <button class="btn btn-primary" type="submit">儲存</button>
+          <button class="btn" type="button" id="product-cancel">取消</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

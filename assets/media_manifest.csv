@@ -1,0 +1,10 @@
+﻿post_id,file_name,file_path,format,status
+P-W1-001,reels-01.mp4,assets/media/reels-01.mp4,mp4,ready
+P-W1-002,feed-01.jpg,assets/media/feed-01.jpg,jpg,ready
+P-W1-003,reels-02.mp4,assets/media/reels-02.mp4,mp4,ready
+P-W1-004,feed-02.jpg,assets/media/feed-02.jpg,jpg,ready
+P-W1-005,reels-03.mp4,assets/media/reels-03.mp4,mp4,ready
+P-W2-001,reels-04.mp4,assets/media/reels-04.mp4,mp4,ready
+P-W2-002,feed-03.jpg,assets/media/feed-03.jpg,jpg,ready
+P-W2-003,reels-05.mp4,assets/media/reels-05.mp4,mp4,ready
+P-W2-004,feed-04.jpg,assets/media/feed-04.jpg,jpg,ready
