@@ -2,7 +2,8 @@
 setlocal
 cd /d "%~dp0"
 
-set "PORT=4173"
+set "PORT=%~1"
+if not defined PORT set "PORT=4173"
 set "PYTHON_CMD="
 
 where python >nul 2>nul && set "PYTHON_CMD=python"
@@ -19,4 +20,4 @@ echo [INFO] URL: http://127.0.0.1:%PORT%/index.html
 echo [INFO] Keep this window open. Press Ctrl+C to stop.
 echo.
 
-%PYTHON_CMD% -m http.server %PORT% --bind 127.0.0.1
+%PYTHON_CMD% -m http.server %PORT% --bind 0.0.0.0
