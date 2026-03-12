@@ -39,10 +39,17 @@ h2 { margin: 0; font-size: 1.1rem; }
 select, input { border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; background: #fff; width: 100%; }
 .kanban { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 10px; }
 .weekly-products { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.weekly-plan-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .w-product { border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 10px; }
 .w-product img { width: 100%; height: 132px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: #f7f1ea; margin-bottom: 8px; }
 .w-product h4 { margin: 0 0 6px; font-size: 0.9rem; }
 .w-product p { margin: 4px 0; font-size: 0.8rem; color: var(--muted); }
+.plan-card { border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 10px; }
+.plan-highlight { background: linear-gradient(180deg, #fff9f0, #fff); border-color: #e8cfb2; }
+.plan-card h4 { margin: 0 0 8px; font-size: 0.92rem; }
+.plan-card p { margin: 4px 0; font-size: 0.82rem; color: #5f5347; line-height: 1.45; }
+.plan-card ul { margin: 6px 0 0; padding-left: 18px; }
+.plan-card li { margin: 4px 0; font-size: 0.8rem; color: #5f5347; }
 .k-col { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; background: #fff; }
 .k-title { margin: 0 0 8px; font-size: 0.9rem; color: var(--muted); }
 .k-item { border: 1px solid var(--line); border-radius: 8px; background: #fffdf9; padding: 8px; margin-bottom: 8px; font-size: 0.85rem; }

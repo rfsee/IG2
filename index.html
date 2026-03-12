@@ -15,6 +15,8 @@
         <div class="toolbar">
           <button id="add-post-btn" class="btn btn-primary" type="button">新增貼文</button>
           <button id="add-product-btn" class="btn" type="button">新增商品</button>
+          <button id="backup-state-btn" class="btn" type="button">建立備份</button>
+          <button id="restore-state-btn" class="btn" type="button">還原最近備份</button>
           <button id="export-posts-btn" class="btn" type="button">匯出貼文CSV</button>
           <button id="export-products-btn" class="btn" type="button">匯出商品CSV</button>
           <label class="btn file-btn">匯入貼文CSV<input id="import-posts" type="file" accept=".csv" hidden /></label>
@@ -34,7 +36,10 @@
           <h3 id="weekly-products-title">本週主推商品</h3>
         </div>
         <div class="weekly-products" id="weekly-products"></div>
-        <div class="kanban" id="kanban"></div>
+        <div class="panel-head">
+          <h3>本週 IG 行銷方案總覽</h3>
+        </div>
+        <div class="weekly-plan-overview" id="weekly-plan-overview"></div>
       </section>
 
       <section class="panel">
@@ -65,7 +70,7 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>日期</th><th>格式</th><th>標題</th><th>商品連結</th><th>狀態</th><th>CTA</th><th>A/B</th><th>成效數據</th><th>操作</th></tr>
+              <tr><th>日期</th><th>格式</th><th>標題</th><th>商品連結</th><th>狀態</th><th>CTA</th><th>成效數據</th><th>操作</th></tr>
             </thead>
             <tbody id="posts-tbody"></tbody>
           </table>
@@ -173,45 +178,9 @@
           </div>
           <textarea id="post-image-prompt" rows="6" readonly></textarea>
         </section>
-        <section class="full auto-block">
-          <div class="auto-head">
-            <strong>A/B 實驗版本（自動生成）</strong>
-            <div class="actions-inline">
-              <button class="btn" type="button" id="copy-variant-a-btn">複製A</button>
-              <button class="btn" type="button" id="copy-variant-b-btn">複製B</button>
-            </div>
-          </div>
-          <label class="full">版本 A（效率導向）<textarea id="post-variant-a" rows="4" readonly></textarea></label>
-          <label class="full">版本 B（安心導向）<textarea id="post-variant-b" rows="4" readonly></textarea></label>
-        </section>
         <div class="actions full">
           <button class="btn btn-primary" type="submit">儲存</button>
           <button class="btn" type="button" id="post-cancel">取消</button>
-        </div>
-      </form>
-    </dialog>
-
-    <dialog id="experiment-dialog">
-      <form id="experiment-form" method="dialog" class="form-grid">
-        <h3>A/B 實驗結果</h3>
-        <input type="hidden" id="exp-post-id" />
-        <label class="full">貼文標題<input id="exp-post-title" readonly /></label>
-        <label class="full">假設（Hypothesis）<input id="exp-hypothesis" placeholder="例：強調價格帶比強調風格更能提高點擊" /></label>
-        <label class="full">版本 A<textarea id="exp-variant-a" rows="3" readonly></textarea></label>
-        <label>版本 A 分數<input id="exp-score-a" type="number" min="0" /></label>
-        <label class="full">版本 B<textarea id="exp-variant-b" rows="3" readonly></textarea></label>
-        <label>版本 B 分數<input id="exp-score-b" type="number" min="0" /></label>
-        <label>勝出版本
-          <select id="exp-winner">
-            <option value="pending">待判定</option>
-            <option value="A">A</option>
-            <option value="B">B</option>
-          </select>
-        </label>
-        <div class="actions full">
-          <button class="btn" type="button" id="exp-auto-pick">自動判定</button>
-          <button class="btn btn-primary" type="submit">儲存</button>
-          <button class="btn" type="button" id="exp-cancel">取消</button>
         </div>
       </form>
     </dialog>
