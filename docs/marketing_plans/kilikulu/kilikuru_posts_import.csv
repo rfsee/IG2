@@ -1,0 +1,17 @@
+tenant_id,id,date,type,week,status,title,script,cta,trigger_tags,link,reach,saves,dms,clicks,orders
+,pk001,03/17,feed,W1,草稿,開店介紹,品牌故事->地下氛圍->白天咖啡晚上微醺->來店邀請,追蹤+收藏這間刺蝟咖啡酒館,品牌認知|安心|風格,https://instagram.com/,0,0,0,0,0
+,pk002,03/19,reels,W1,草稿,Americano介紹,豆香特色->口感描述->適合時段->CTA,留言關鍵字菜單拿完整飲品單,證據|價值|轉化,https://instagram.com/,0,0,0,0,0
+,pk003,03/21,feed,W1,草稿,刺蝟推薦 Black Lemon,刺蝟角色推薦->飲品特色->拍照亮點->CTA,私訊預約座位拿刺蝟推薦清單,IP|安心|轉化,https://instagram.com/,0,0,0,0,0
+,pk004,03/23,reels,W1,草稿,店內空間氛圍,入店視角->工業水泥風->chill角落->CTA,收藏這篇下次直接來踩點,風格|痛點|價值,https://instagram.com/,0,0,0,0,0
+,pk005,03/24,reels,W2,草稿,Black Tonic,製作過程->氣泡層次->入口感受->CTA,留言TONIC拿本週限定搭配,證據|價值|緊迫,https://instagram.com/,0,0,0,0,0
+,pk006,03/26,feed,W2,草稿,刺蝟日常,刺蝟角色互動->品牌溫度->顧客互動提問,你最想看刺蝟推薦哪杯,IP|社交|互動,https://instagram.com/,0,0,0,0,0
+,pk007,03/28,reels,W2,草稿,夜晚微醺,晚間燈光->調酒氛圍->好友聚會場景->CTA,私訊預約晚間時段座位,氛圍|痛點|轉化,https://instagram.com/,0,0,0,0,0
+,pk008,03/30,feed,W2,草稿,Latte,奶泡質地->咖啡平衡->白天療癒時段,收藏這杯當你的日常儀式感,安心|價值|品牌,https://instagram.com/,0,0,0,0,0
+,pk009,03/31,reels,W3,草稿,Black Honey,甜感層次->口感對比->適合族群->CTA,留言HONEY拿本週推薦搭配,證據|價值|轉化,https://instagram.com/,0,0,0,0,0
+,pk010,04/02,feed,W3,草稿,店內座位,吧台區/雙人區/小聚區導覽,私訊你的來店人數我幫你建議座位,痛點|安心|轉化,https://instagram.com/,0,0,0,0,0
+,pk011,04/04,feed,W3,草稿,Pizza餐點,餐點特寫->搭配飲品建議->份量描述,留言PIZZA拿餐酒搭配清單,證據|價值|轉化,https://instagram.com/,0,0,0,0,0
+,pk012,04/06,reels,W3,草稿,調酒氛圍,調酒過程->燈光節奏->微醺社交場景,追蹤並私訊預約晚場體驗,氛圍|社交|轉化,https://instagram.com/,0,0,0,0,0
+,pk013,04/07,feed,W4,草稿,刺蝟推薦系列,刺蝟本週Top3->不同口味定位->選擇指南,留言刺蝟拿本週推薦TOP3,IP|安心|轉化,https://instagram.com/,0,0,0,0,0
+,pk014,04/09,reels,W4,草稿,Black Bull,製作過程->口感亮點->適合夜晚節奏,私訊BULL拿本週限定菜單,證據|緊迫|轉化,https://instagram.com/,0,0,0,0,0
+,pk015,04/11,feed,W4,草稿,Crafted Beer,精釀風味比較->適配餐點建議,留言BEER拿精釀風味對照表,證據|價值|轉化,https://instagram.com/,0,0,0,0,0
+,pk016,04/13,feed,W4,草稿,Lasagna,餐點層次->飽足感->晚間分享場景,私訊LASAGNA預約本週晚間時段,價值|社交|轉化,https://instagram.com/,0,0,0,0,0
