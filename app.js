@@ -5,6 +5,10 @@ const MAX_BACKUP_SNAPSHOTS = 12;
 const INITIAL_POSTS_CSV_PATH = "assets/google_sheets/posts_import.csv";
 const INITIAL_PRODUCTS_CSV_PATH = "assets/google_sheets/products_import.csv";
 const PRODUCT_COVERS_JSON_PATH = "assets/product_covers.json";
+const PRODUCT_COVER_CACHE_KEY = "ig_ops_product_cover_cache_v1";
+const BRAND_STRATEGY_API_BASE_STORAGE_KEY = "ig_ops_backend_api_base_v1";
+const BRAND_STRATEGY_AUTH_SESSION_KEY = "ig_ops_auth_session_v1";
+const BRAND_STRATEGY_API_BASE_DEFAULT = "http://127.0.0.1:8793";
 const SHOPEE_SHOP_ID = "179481064";
 const STATUS_ORDER = ["草稿", "待拍", "待上架", "已發佈"];
 const LEGACY_PRODUCT_TERMS = ["超薄鞋櫃", "翻斗鞋櫃", "羊羔絨椅", "泰迪熊羊羔絨椅"];
@@ -110,17 +114,24 @@ const hasStoredState = hasPersistedState();
 const loadResult = loadState();
 const state = loadResult.state;
 const productCoverMap = new Map();
+const productCoverLookupInFlight = new Set();
+const productCoverLookupRetryAt = new Map();
+let brandStrategyIntakeState = null;
+let brandStrategyPlanState = null;
 
 const refs = {
   kpiGrid: document.getElementById("kpi-grid"),
   weeklyProductsTitle: document.getElementById("weekly-products-title"),
   weeklyProducts: document.getElementById("weekly-products"),
   weeklyPlanOverview: document.getElementById("weekly-plan-overview"),
+  boardProgressFill: document.getElementById("board-progress-fill"),
+  boardProgressText: document.getElementById("board-progress-text"),
   postsTbody: document.getElementById("posts-tbody"),
   productsTbody: document.getElementById("products-tbody"),
   filterWeek: document.getElementById("filter-week"),
   filterType: document.getElementById("filter-type"),
   filterStatus: document.getElementById("filter-status"),
+  filterPostSearch: document.getElementById("filter-post-search"),
   postDialog: document.getElementById("post-dialog"),
   productDialog: document.getElementById("product-dialog"),
   postForm: document.getElementById("post-form"),
@@ -158,8 +169,24 @@ const refs = {
   dmCopyBtn: document.getElementById("dm-copy-btn"),
   dmScriptOutput: document.getElementById("dm-script-output"),
   dmThreadsTbody: document.getElementById("dm-threads-tbody"),
+  brandStrategyPanel: document.getElementById("brand-strategy-panel"),
+  brandStrategySummary: document.getElementById("brand-strategy-summary"),
+  brandStrategyRefreshBtn: document.getElementById("brand-strategy-refresh-btn"),
+  brandStrategyGenerateBtn: document.getElementById("brand-strategy-generate-btn"),
+  brandStrategyBrandName: document.getElementById("brand-strategy-brand-name"),
+  brandStrategyIndustry: document.getElementById("brand-strategy-industry"),
+  brandStrategyTargetAudience: document.getElementById("brand-strategy-target-audience"),
+  brandStrategyBusinessGoal: document.getElementById("brand-strategy-business-goal"),
+  brandStrategyTone: document.getElementById("brand-strategy-tone"),
+  brandStrategyKeywords: document.getElementById("brand-strategy-keywords"),
+  brandStrategyMoodSlider: document.getElementById("brand-strategy-mood-slider"),
+  brandStrategyMoodValue: document.getElementById("brand-strategy-mood-value"),
+  brandStrategyConstraints: document.getElementById("brand-strategy-constraints"),
+  brandStrategyNotes: document.getElementById("brand-strategy-notes"),
+  brandStrategyOutput: document.getElementById("brand-strategy-output"),
   weeklyReportBtn: document.getElementById("weekly-report-btn"),
   weeklyReportCopyBtn: document.getElementById("weekly-report-copy-btn"),
+  weeklyReportKpiCards: document.getElementById("weekly-report-kpi-cards"),
   weeklyReportOutput: document.getElementById("weekly-report-output"),
   weeklyActions: document.getElementById("weekly-actions"),
   sopChecklist: document.getElementById("sop-checklist"),
@@ -175,12 +202,19 @@ const refs = {
   productScene: document.getElementById("product-scene")
 };
 
+loadProductCoverCache();
 bindEvents();
 if (loadResult.needsPersist) {
   persistStateSnapshot(state);
 }
 syncDraftTitlesWithProducts(true);
 renderAll();
+syncBrandStrategyFromBackend().catch(() => {
+  if (refs.brandStrategySummary) {
+    refs.brandStrategySummary.textContent = "品牌策略暫時離線，請確認後端服務已啟動。";
+  }
+  renderBrandStrategyPanel();
+});
 if (!hasStoredState) {
   hydrateFromCsvOnFirstLoad();
 }
@@ -245,6 +279,9 @@ function bindEvents() {
   refs.filterWeek.addEventListener("change", renderAll);
   refs.filterType.addEventListener("change", renderAll);
   refs.filterStatus.addEventListener("change", renderAll);
+  if (refs.filterPostSearch) {
+    refs.filterPostSearch.addEventListener("input", renderAll);
+  }
 
   refs.exportPostsBtn.addEventListener("click", () => exportPostsCsv(state.posts));
   refs.exportProductsBtn.addEventListener("click", () => exportProductsCsv(state.products));
@@ -268,6 +305,36 @@ function bindEvents() {
     withAutoBackup("before_import_products", () => importProductsCsv(text));
     refs.importProductsInput.value = "";
   });
+
+  if (refs.brandStrategyRefreshBtn) {
+    refs.brandStrategyRefreshBtn.addEventListener("click", async () => {
+      try {
+        await syncBrandStrategyFromBackend();
+      } catch (error) {
+        alert(`品牌策略同步失敗：${String(error.message || error)}`);
+      }
+    });
+  }
+
+  if (refs.brandStrategyGenerateBtn) {
+    refs.brandStrategyGenerateBtn.addEventListener("click", async () => {
+      try {
+        await saveAndGenerateBrandStrategy();
+      } catch (error) {
+        alert(`品牌策略生成失敗：${String(error.message || error)}`);
+      }
+    });
+  }
+
+  if (refs.brandStrategyOutput) {
+    refs.brandStrategyOutput.addEventListener("click", onBrandStrategyOutputClick);
+  }
+
+  if (refs.brandStrategyMoodSlider) {
+    refs.brandStrategyMoodSlider.addEventListener("input", () => {
+      renderBrandStrategyMoodLabel();
+    });
+  }
 }
 
 function loadState() {
@@ -552,7 +619,9 @@ async function hydrateProductCoverMap() {
         productCoverMap.set(`id:${idKey}`, cover);
       }
     });
+    saveProductCoverCache();
     renderWeeklyProducts();
+    renderProductsTable();
   } catch (_error) {
   }
 }
@@ -863,6 +932,7 @@ function normalizePost(post) {
 }
 
 function renderAll() {
+  renderBrandStrategyPanel();
   renderKpi();
   renderWeeklyProducts();
   renderWeeklyPlanOverview();
@@ -912,21 +982,21 @@ function renderWeeklyProducts() {
   const weeklyLinkedProducts = getWeeklyLinkedProducts(week);
   const cards = weeklyLinkedProducts
     .map(({ link, product }) => {
-      const photoName = getProductPhotoName(product);
       const imageSrc = resolveProductImageSrc(product);
       return `
         <article class="w-product">
-          ${imageSrc ? `<img src="${escapeAttribute(imageSrc)}" alt="${escapeAttribute(product.name || "商品圖片")}" loading="lazy" />` : ""}
+          ${imageSrc ? `<img src="${escapeAttribute(imageSrc)}" alt="${escapeAttribute(product.name || "商品圖片")}" loading="lazy" />` : '<div class="w-product-image-placeholder">🛍️</div>'}
           <h4>${escapeHtml(product.name || "未命名商品")}</h4>
-          <p>照片名稱：${escapeHtml(photoName)}</p>
-          <p>價格：NT$${escapeHtml(String(product.price || 0))}</p>
-          <p><a href="${escapeAttribute(link)}" target="_blank" rel="noreferrer">${escapeHtml(link)}</a></p>
+          <p class="w-product-price">$${escapeHtml(Number(product.price || 0).toLocaleString("en-US"))}</p>
+          <div class="w-product-actions"><a class="btn icon-btn icon-link-btn" href="${escapeAttribute(link)}" target="_blank" rel="noreferrer" title="開啟商品頁">🛒</a></div>
         </article>
       `;
     })
     .filter(Boolean);
 
-  refs.weeklyProducts.innerHTML = cards.length > 0 ? cards.join("") : '<article class="w-product"><p>本週尚無已綁定商品的貼文。</p></article>';
+  refs.weeklyProducts.innerHTML = cards.length > 0
+    ? cards.join("")
+    : '<article class="w-product placeholder-card"><div class="placeholder-frame">✨ 點擊開始規劃本週靈感</div><p>本週尚無已綁定商品的貼文。</p></article>';
 }
 
 function renderWeeklyPlanOverview() {
@@ -935,7 +1005,8 @@ function renderWeeklyPlanOverview() {
   const weeklyLinkedProducts = getWeeklyLinkedProducts(week);
 
   if (weeklyPosts.length === 0) {
-    refs.weeklyPlanOverview.innerHTML = '<article class="plan-card"><h4>本週尚未規劃貼文</h4><p>先新增本週貼文與商品連結，系統就會自動生成 IG 方案總覽。</p></article>';
+    refs.weeklyPlanOverview.innerHTML = '<article class="plan-card placeholder-card"><div class="placeholder-frame">✨ 點擊開始規劃本週靈感</div><h4>本週尚未規劃貼文</h4><p>先新增本週貼文與商品連結，系統就會自動生成 IG 方案總覽。</p></article>';
+    renderBoardProgress(0, 0);
     return;
   }
 
@@ -979,7 +1050,9 @@ function renderWeeklyPlanOverview() {
       const postType = post.type === "reels" ? "Reels" : "Feed";
       const product = findProductByLink(post.link);
       const title = buildLinkedTitle(post, product);
-      return `<li>${escapeHtml(post.date)}｜${escapeHtml(postType)}｜${escapeHtml(title)}（${escapeHtml(post.status)}）</li>`;
+      return `<li><span class="plan-bullet">✨</span>${escapeHtml(post.date)}｜${escapeHtml(postType)}｜${escapeHtml(title)} <span class="plan-status-pill ${resolvePlanStatusClass(
+        post.status
+      )}">${escapeHtml(post.status)}</span></li>`;
     })
     .join("");
 
@@ -996,11 +1069,38 @@ function renderWeeklyPlanOverview() {
     </article>
     <article class="plan-card">
       <h4>本週執行清單</h4>
-      <ul>
+      <ul class="plan-checklist">
         ${scheduleItems || "<li>尚未排定本週貼文</li>"}
       </ul>
     </article>
   `;
+
+  renderBoardProgress(weeklyPosts.length, publishedCount);
+}
+
+function renderBoardProgress(totalCount, publishedCount) {
+  if (!refs.boardProgressFill || !refs.boardProgressText) {
+    return;
+  }
+  const total = Math.max(0, Number(totalCount || 0));
+  const published = Math.max(0, Number(publishedCount || 0));
+  const percent = total > 0 ? Math.round((published / total) * 100) : 0;
+  refs.boardProgressFill.style.width = `${percent}%`;
+  refs.boardProgressText.textContent = `本週完成度 ${percent}%`;
+}
+
+function resolvePlanStatusClass(status) {
+  const value = String(status || "").trim();
+  if (value === "已發佈") {
+    return "is-published";
+  }
+  if (value === "待上架") {
+    return "is-pending";
+  }
+  if (value === "待拍") {
+    return "is-todo";
+  }
+  return "is-draft";
 }
 
 function getWeeklyLinkedProducts(week) {
@@ -1036,11 +1136,28 @@ function getFilteredPosts({ forceWeek } = {}) {
   const weekFilter = forceWeek || refs.filterWeek.value;
   const typeFilter = refs.filterType.value;
   const statusFilter = refs.filterStatus.value;
+  const searchQuery = String(refs.filterPostSearch?.value || "").trim().toLowerCase();
 
   return state.posts
     .filter((post) => (weekFilter === "all" ? true : post.week === weekFilter))
     .filter((post) => (typeFilter === "all" ? true : post.type === typeFilter))
     .filter((post) => (statusFilter === "all" ? true : post.status === statusFilter))
+    .filter((post) => {
+      if (!searchQuery) {
+        return true;
+      }
+      const product = findProductByLink(post.link);
+      const text = [
+        post.title,
+        post.script,
+        post.cta,
+        post.link,
+        product?.name
+      ]
+        .map((item) => String(item || "").toLowerCase())
+        .join(" ");
+      return text.includes(searchQuery);
+    })
     .sort((a, b) => normalizeDate(a.date).localeCompare(normalizeDate(b.date)));
 }
 
@@ -1049,33 +1166,39 @@ function renderPostsTable() {
 
   refs.postsTbody.innerHTML = rows
     .map((post) => {
-      const safeLink = post.link ? `<a href="${escapeAttribute(post.link)}" target="_blank" rel="noreferrer">商品頁</a>` : "-";
+      const product = findProductByLink(post.link);
+      const linkText = post.link ? "連結已設定" : "未設定連結";
+      const linkedProductName = product?.name ? `${escapeHtml(product.name)}` : "未綁定商品";
       const statusSelect =
         `<select data-action="set-status" data-id="${escapeAttribute(post.id)}">` +
         `${STATUS_ORDER.map((option) => `<option value="${option}" ${post.status === option ? "selected" : ""}>${option}</option>`).join("")}` +
         "</select>";
       const metrics = post.metrics || { reach: 0, saves: 0, dms: 0, clicks: 0, orders: 0 };
       const metricsInputs = [
-        `<label>觸及<input type="number" min="0" data-action="set-metric" data-metric="reach" data-id="${escapeAttribute(post.id)}" value="${escapeAttribute(String(metrics.reach || 0))}" /></label>`,
-        `<label>收藏<input type="number" min="0" data-action="set-metric" data-metric="saves" data-id="${escapeAttribute(post.id)}" value="${escapeAttribute(String(metrics.saves || 0))}" /></label>`,
-        `<label>私訊<input type="number" min="0" data-action="set-metric" data-metric="dms" data-id="${escapeAttribute(post.id)}" value="${escapeAttribute(String(metrics.dms || 0))}" /></label>`,
-        `<label>點擊<input type="number" min="0" data-action="set-metric" data-metric="clicks" data-id="${escapeAttribute(post.id)}" value="${escapeAttribute(String(metrics.clicks || 0))}" /></label>`,
-        `<label>下單<input type="number" min="0" data-action="set-metric" data-metric="orders" data-id="${escapeAttribute(post.id)}" value="${escapeAttribute(String(metrics.orders || 0))}" /></label>`
+        `<span class="metric-pill" title="觸及" aria-label="觸及">❤️ ${escapeHtml(formatMetricCompact(metrics.reach || 0))}</span>`,
+        `<span class="metric-pill" title="收藏" aria-label="收藏">📥 ${escapeHtml(formatMetricCompact(metrics.saves || 0))}</span>`,
+        `<span class="metric-pill" title="點擊" aria-label="點擊">🖱️ ${escapeHtml(formatMetricCompact(metrics.clicks || 0))}</span>`
       ].join(" ");
 
       return `
-        <tr>
+        <tr class="post-row-card">
           <td>${escapeHtml(post.date)}</td>
-          <td>${post.type === "reels" ? "Reels" : "Feed"}</td>
-          <td>${escapeHtml(post.title)}</td>
-          <td>${safeLink}</td>
-          <td><span class="badge ${escapeAttribute(post.status)}">${escapeHtml(post.status)}</span><div>${statusSelect}</div></td>
-          <td>${escapeHtml(post.cta || "-")}</td>
-          <td><div class="metric-grid">${metricsInputs}</div></td>
           <td>
-            <div class="actions-inline">
-              <button class="btn" type="button" data-action="edit-post" data-id="${escapeAttribute(post.id)}">編輯</button>
-              <button class="btn" type="button" data-action="delete-post" data-id="${escapeAttribute(post.id)}">刪除</button>
+            <div class="post-title-wrap"><strong>${escapeHtml(post.title)}</strong><span class="post-type-chip">${post.type === "reels" ? "Reels" : "Feed"}</span></div>
+            <div class="post-cta-text">${escapeHtml(post.cta || "尚未設定 CTA")}</div>
+          </td>
+          <td class="post-product-cell">
+            <div class="post-link-stack">
+              <span class="post-link-chip">🔗 ${escapeHtml(linkText)}</span>
+              <span class="post-product-name">🛍️ ${linkedProductName}</span>
+            </div>
+          </td>
+          <td class="post-status-cell"><span class="badge ${escapeAttribute(post.status)}">${escapeHtml(post.status)}</span><div class="status-select-wrap">${statusSelect}</div></td>
+          <td><div class="metric-grid metric-grid-card">${metricsInputs}</div></td>
+          <td>
+            <div class="actions-inline icon-action-row">
+              <button class="btn icon-btn" type="button" title="編輯" data-action="edit-post" data-id="${escapeAttribute(post.id)}">✏️</button>
+              <button class="btn icon-btn" type="button" title="刪除" data-action="delete-post" data-id="${escapeAttribute(post.id)}">🗑️</button>
             </div>
           </td>
         </tr>
@@ -1088,18 +1211,36 @@ function renderProductsTable() {
   const rows = [...state.products].sort((a, b) => Number(a.price) - Number(b.price));
   refs.productsTbody.innerHTML = rows
     .map((product) => {
-      const safeLink = product.link ? `<a href="${escapeAttribute(product.link)}" target="_blank" rel="noreferrer">商品頁</a>` : "-";
+      const imageSrc = resolveProductImageSrc(product);
+      const specTags = [product.size, product.material]
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+        .map((item) => `<span class="product-spec-chip">${escapeHtml(item)}</span>`)
+        .join("");
+      const sellingText = String(product.selling || "-").trim() || "-";
+      const safeLink = product.link
+        ? `<a class="btn icon-btn icon-link-btn" href="${escapeAttribute(product.link)}" target="_blank" rel="noreferrer" title="開啟商品頁">↗️</a>`
+        : `<span class="btn icon-btn icon-link-btn is-disabled" title="尚未設定商品連結">↗️</span>`;
       return `
-        <tr>
-          <td>${escapeHtml(product.name)}</td>
-          <td>${escapeHtml(String(product.price || ""))}</td>
-          <td>${escapeHtml(product.size || "-")}</td>
-          <td>${escapeHtml(product.selling || "-")}</td>
-          <td>${safeLink}</td>
+        <tr class="product-row-card">
           <td>
-            <div class="actions-inline">
-              <button class="btn" type="button" data-action="edit-product" data-id="${escapeAttribute(product.id)}">編輯</button>
-              <button class="btn" type="button" data-action="delete-product" data-id="${escapeAttribute(product.id)}">刪除</button>
+            <div class="product-main-cell">
+              <div class="product-thumb-wrap">${imageSrc
+                ? `<img src="${escapeAttribute(imageSrc)}" alt="${escapeAttribute(product.name || "商品圖片")}" class="product-thumb" loading="lazy" />`
+                : '<div class="product-thumb placeholder">🪑</div>'}</div>
+              <div>
+                <strong class="product-name-strong">${escapeHtml(product.name)}</strong>
+                <div class="product-price-sub"><span class="price-symbol">$</span>${escapeHtml(Number(product.price || 0).toLocaleString("en-US"))}</div>
+              </div>
+            </div>
+          </td>
+          <td><div class="product-spec-wrap">${specTags || '<span class="product-spec-chip">尚未設定規格</span>'}</div></td>
+          <td><span class="product-selling-truncate" title="${escapeAttribute(sellingText)}">${escapeHtml(sellingText)}</span></td>
+          <td>
+            <div class="actions-inline icon-action-row product-actions-row">
+              ${safeLink}
+              <button class="btn icon-btn icon-btn-gradient" type="button" title="編輯" data-action="edit-product" data-id="${escapeAttribute(product.id)}">✏️</button>
+              <button class="btn icon-btn icon-btn-gradient" type="button" title="刪除" data-action="delete-product" data-id="${escapeAttribute(product.id)}">🗑️</button>
             </div>
           </td>
         </tr>
@@ -1145,6 +1286,518 @@ function renderDmThreads() {
       `;
     })
     .join("");
+}
+
+function renderBrandStrategyPanel() {
+  if (!refs.brandStrategySummary || !refs.brandStrategyOutput) {
+    return;
+  }
+  const available = Boolean(refs.brandStrategyRefreshBtn && refs.brandStrategyGenerateBtn);
+  if (!available) {
+    refs.brandStrategySummary.textContent = "目前前台版本未載入品牌策略面板控制項。";
+    refs.brandStrategyOutput.innerHTML = "";
+    return;
+  }
+
+  renderBrandStrategyMoodLabel();
+  refs.brandStrategySummary.textContent = "品牌策略引擎已就緒，可開始整理品牌靈感牆。";
+
+  const keywords = Array.isArray(brandStrategyIntakeState?.keywords) ? brandStrategyIntakeState.keywords : [];
+
+  if (!brandStrategyPlanState) {
+    const previewCells = buildBrandStrategyIgPreviewCells(null);
+    refs.brandStrategyOutput.innerHTML = `
+      <div class="strategy-gallery brand-strategy-stack">
+        <article class="strategy-card strategy-card--hero">
+          <strong class="strategy-hero-title">品牌策略畫廊（等待生成）</strong>
+          <div class="content-upgrade-meta">先填寫品牌資訊並點「儲存並產生策略」，生成後會顯示完整 AI 建議。</div>
+          <div class="tag-cloud" aria-label="推薦標籤雲">${keywords
+            .map((tag, index) => `<button class="tag-pill" style="--tag-index:${index % 6}" type="button">#${escapeHtml(tag)}</button>`)
+            .join("") || '<span class="content-upgrade-meta">尚未輸入關鍵字</span>'}</div>
+        </article>
+        <article class="strategy-card brand-wall-card">
+          <strong>你的專屬視覺牆（九宮格）</strong>
+          <div class="ig-phone-shell"><div class="ig-preview-grid">${previewCells
+            .map(
+              (cell) => `<div class="ig-preview-cell ${resolveIgPreviewTypeClass(cell.type)}"><span class="ig-preview-type ${resolveIgPreviewTypeClass(cell.type)}">${escapeHtml(
+                formatIgPreviewBadge(cell.type)
+              )}</span><div class="ig-preview-content"><strong class="ig-preview-title">${escapeHtml(cell.title)}</strong><p class="ig-preview-caption">${escapeHtml(
+                cell.caption
+              )}</p></div><div class="ig-preview-actions"><button class="btn btn-secondary" type="button" data-action="brand-edit-cell" data-post-id="${escapeAttribute(
+                cell.postId || ""
+              )}" data-cell-title="${escapeAttribute(
+                cell.title
+              )}" data-cell-caption="${escapeAttribute(cell.caption)}">✍️ 編輯文字</button><button class="btn btn-secondary" type="button" data-action="brand-generate-image" data-post-id="${escapeAttribute(
+                cell.postId || ""
+              )}" data-cell-title="${escapeAttribute(
+                cell.title
+              )}" data-cell-caption="${escapeAttribute(cell.caption)}">🎨 生成圖片</button></div></div>`
+            )
+            .join("")}</div></div>
+        </article>
+      </div>
+    `;
+    return;
+  }
+
+  const plan = brandStrategyPlanState;
+  const signals = Array.isArray(plan.algorithmSignals) ? plan.algorithmSignals : [];
+  const pillars = Array.isArray(plan.contentPillars) ? plan.contentPillars : [];
+  const hooks = Array.isArray(plan.copyFramework?.hookTemplates) ? plan.copyFramework.hookTemplates : [];
+  const ctas = Array.isArray(plan.copyFramework?.ctaTemplates) ? plan.copyFramework.ctaTemplates : [];
+  const prompts = Array.isArray(plan.imagePromptFramework?.prompts) ? plan.imagePromptFramework.prompts : [];
+  const previewCells = buildBrandStrategyIgPreviewCells(plan);
+
+  refs.brandStrategyOutput.innerHTML = `
+    <div class="strategy-gallery brand-strategy-stack">
+      <article class="strategy-card strategy-card--hero">
+        <strong class="strategy-hero-title">${escapeHtml(plan.title || "品牌策略")}</strong>
+        <div class="content-upgrade-meta">${escapeHtml(plan.summary || "")}</div>
+        <div class="content-upgrade-meta">週節奏：Reels ${escapeHtml(String(plan.weeklyCadence?.reels || 0))} / Feed ${escapeHtml(String(
+          plan.weeklyCadence?.feed || 0
+        ))} / Story ${escapeHtml(String(plan.weeklyCadence?.story || 0))}</div>
+        <div class="content-upgrade-meta">產生時間：${escapeHtml(formatDateTime(plan.generatedAt || plan.createdAt || ""))}</div>
+        <div class="tag-cloud" aria-label="推薦標籤雲">${keywords
+          .map((tag, index) => `<button class="tag-pill" style="--tag-index:${index % 6}" type="button">#${escapeHtml(tag)}</button>`)
+          .join("")}</div>
+      </article>
+
+      <article class="strategy-card brand-wall-card">
+        <strong>你的專屬視覺牆（九宮格）</strong>
+        <div class="ig-phone-shell"><div class="ig-preview-grid">${previewCells
+          .map(
+            (cell) => `<div class="ig-preview-cell ${resolveIgPreviewTypeClass(cell.type)}"><span class="ig-preview-type ${resolveIgPreviewTypeClass(cell.type)}">${escapeHtml(
+              formatIgPreviewBadge(cell.type)
+            )}</span><div class="ig-preview-content"><strong class="ig-preview-title">${escapeHtml(cell.title)}</strong><p class="ig-preview-caption">${escapeHtml(
+              cell.caption
+            )}</p></div><div class="ig-preview-actions"><button class="btn btn-secondary" type="button" data-action="brand-edit-cell" data-post-id="${escapeAttribute(
+              cell.postId || ""
+            )}" data-cell-title="${escapeAttribute(
+              cell.title
+            )}" data-cell-caption="${escapeAttribute(cell.caption)}">✍️ 編輯文字</button><button class="btn btn-secondary" type="button" data-action="brand-generate-image" data-post-id="${escapeAttribute(
+              cell.postId || ""
+            )}" data-cell-title="${escapeAttribute(
+              cell.title
+            )}" data-cell-caption="${escapeAttribute(cell.caption)}">🎨 生成圖片</button></div></div>`
+          )
+          .join("")}</div></div>
+      </article>
+    </div>
+
+    <div class="brand-insight-grid">
+      <article class="strategy-card insight-card"><strong>💡 演算法密技</strong><ul class="content-upgrade-list insight-list">${signals
+      .map(
+        (item) => `<li class="content-upgrade-item"><strong>✨ ${escapeHtml(item.name || "signal")}</strong><div class="content-upgrade-meta">${escapeHtml(
+          item.action || ""
+        )}</div></li>`
+      )
+      .join("")}</ul></article>
+      <article class="strategy-card insight-card"><strong>🏗️ 內容骨架</strong><ul class="content-upgrade-list insight-list">${pillars
+      .map(
+        (item) => `<li class="content-upgrade-item"><strong>${escapeHtml(item.name || "pillar")}</strong><div class="content-upgrade-meta">${escapeHtml(
+          item.why || ""
+        )}</div><div class="content-upgrade-meta">✅ CTA：${escapeHtml(item.cta || "")}</div></li>`
+      )
+      .join("")}</ul></article>
+      <article class="strategy-card insight-card"><div class="row-between"><strong>✍️ 文案靈感</strong><button class="btn btn-secondary" type="button" data-action="brand-copy-captions">一鍵複製</button></div>
+        <div class="insight-copy-block">Hook：${escapeHtml(hooks.join(" / "))}<br/>CTA：${escapeHtml(ctas.join(" / "))}</div>
+        <ul class="content-upgrade-list insight-list">${prompts
+          .map(
+            (item) => `<li class="content-upgrade-item"><strong>${escapeHtml(item.scenario || "場景")}</strong><div class="content-upgrade-meta">${escapeHtml(
+              item.prompt || ""
+            )}</div></li>`
+          )
+          .join("")}</ul>
+      </article>
+    </div>
+  `;
+}
+
+async function syncBrandStrategyFromBackend() {
+  const [intakePayload, planPayload] = await Promise.all([
+    requestBrandStrategyApi("GET", "/api/brand-strategy/intake"),
+    requestBrandStrategyApi("GET", "/api/brand-strategy/plan")
+  ]);
+  brandStrategyIntakeState = normalizeBrandStrategyIntake(intakePayload?.item || null);
+  brandStrategyPlanState = normalizeBrandStrategyPlan(planPayload?.item || null);
+  if (brandStrategyIntakeState) {
+    hydrateBrandStrategyForm(brandStrategyIntakeState);
+  }
+  renderBrandStrategyPanel();
+}
+
+async function saveAndGenerateBrandStrategy() {
+  if (!refs.brandStrategyBrandName) {
+    return;
+  }
+  const payload = {
+    brandName: String(refs.brandStrategyBrandName.value || "").trim(),
+    industry: String(refs.brandStrategyIndustry?.value || "").trim(),
+    targetAudience: String(refs.brandStrategyTargetAudience?.value || "").trim(),
+    businessGoal: String(refs.brandStrategyBusinessGoal?.value || "").trim(),
+    tone: composeBrandToneFromMood(String(refs.brandStrategyTone?.value || "").trim(), getBrandMoodSliderValue()),
+    keywords: parseBrandStrategyKeywords(refs.brandStrategyKeywords?.value || ""),
+    constraints: String(refs.brandStrategyConstraints?.value || "").trim(),
+    notes: String(refs.brandStrategyNotes?.value || "").trim()
+  };
+  if (!payload.brandName) {
+    throw new Error("brand_strategy_brand_name_required");
+  }
+
+  refs.brandStrategyGenerateBtn.disabled = true;
+  refs.brandStrategyPanel?.classList.add("is-generating");
+  refs.brandStrategyOutput?.classList.add("aurora-loading");
+  triggerMicroFeedback();
+  try {
+    const intake = await requestBrandStrategyApi("POST", "/api/brand-strategy/intake", payload);
+    const intakeId = String(intake?.item?.id || "").trim();
+    if (!intakeId) {
+      throw new Error("brand_strategy_intake_id_missing");
+    }
+    await requestBrandStrategyApi("POST", "/api/brand-strategy/generate", { intakeId });
+    await syncBrandStrategyFromBackend();
+    alert("品牌策略已產生（含文案框架與圖片指令）");
+  } finally {
+    refs.brandStrategyPanel?.classList.remove("is-generating");
+    refs.brandStrategyOutput?.classList.remove("aurora-loading");
+    refs.brandStrategyGenerateBtn.disabled = false;
+  }
+}
+
+function hydrateBrandStrategyForm(intake) {
+  if (!intake) {
+    return;
+  }
+  if (refs.brandStrategyBrandName) refs.brandStrategyBrandName.value = intake.brandName || "";
+  if (refs.brandStrategyIndustry) refs.brandStrategyIndustry.value = intake.industry || "";
+  if (refs.brandStrategyTargetAudience) refs.brandStrategyTargetAudience.value = intake.targetAudience || "";
+  if (refs.brandStrategyBusinessGoal) refs.brandStrategyBusinessGoal.value = intake.businessGoal || "";
+  if (refs.brandStrategyTone) refs.brandStrategyTone.value = intake.tone || "";
+  if (refs.brandStrategyKeywords) refs.brandStrategyKeywords.value = Array.isArray(intake.keywords) ? intake.keywords.join(", ") : "";
+  if (refs.brandStrategyConstraints) refs.brandStrategyConstraints.value = intake.constraints || "";
+  if (refs.brandStrategyNotes) refs.brandStrategyNotes.value = intake.notes || "";
+}
+
+async function requestBrandStrategyApi(method, path, body) {
+  const apiBase = resolveBrandStrategyApiBase();
+  const auth = resolveBrandStrategyAuthContext();
+  const headers = {
+    "content-type": "application/json",
+    authorization: `Bearer ${auth.token}`,
+    "x-tenant-id": auth.tenantId
+  };
+  let response;
+  try {
+    response = await fetch(`${apiBase}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+  } catch (_error) {
+    throw new Error(`brand_strategy_network_error (${apiBase})`);
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(String(payload.error || `brand_strategy_request_failed_${response.status}`));
+  }
+  return payload;
+}
+
+function resolveBrandStrategyApiBase() {
+  const query = new URLSearchParams(window.location.search).get("backend_api_base");
+  if (query) {
+    return String(query).replace(/\/+$/, "");
+  }
+  const fromStorage = String(localStorage.getItem(BRAND_STRATEGY_API_BASE_STORAGE_KEY) || "").trim();
+  if (fromStorage) {
+    return fromStorage.replace(/\/+$/, "");
+  }
+  return BRAND_STRATEGY_API_BASE_DEFAULT;
+}
+
+function resolveBrandStrategyAuthContext() {
+  let token = "dev_user_u_owner";
+  let tenantId = "tenant_default";
+  try {
+    const rawSession = localStorage.getItem(BRAND_STRATEGY_AUTH_SESSION_KEY);
+    if (rawSession) {
+      const parsed = JSON.parse(rawSession);
+      if (parsed?.connected && parsed?.token) {
+        token = String(parsed.token || token).trim() || token;
+      }
+    }
+  } catch (_error) {
+  }
+  try {
+    const rawTenant = localStorage.getItem("ig_ops_tenants_v1");
+    if (rawTenant) {
+      const parsed = JSON.parse(rawTenant);
+      const active = String(parsed?.activeTenantId || "").trim();
+      if (active) {
+        tenantId = active;
+      }
+    }
+  } catch (_error) {
+  }
+  return {
+    token,
+    tenantId
+  };
+}
+
+function parseBrandStrategyKeywords(value) {
+  return [...new Set(
+    String(value || "")
+      .split(/[\n,，]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  )].slice(0, 20);
+}
+
+function normalizeBrandStrategyIntake(item) {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+  const id = String(item.id || "").trim();
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    brandName: String(item.brandName || "").trim(),
+    industry: String(item.industry || "general").trim() || "general",
+    targetAudience: String(item.targetAudience || "").trim(),
+    businessGoal: String(item.businessGoal || "").trim(),
+    tone: String(item.tone || "").trim(),
+    keywords: Array.isArray(item.keywords) ? item.keywords.map((keyword) => String(keyword || "").trim()).filter(Boolean) : [],
+    constraints: String(item.constraints || "").trim(),
+    notes: String(item.notes || "").trim(),
+    createdAt: String(item.createdAt || ""),
+    updatedAt: String(item.updatedAt || "")
+  };
+}
+
+function normalizeBrandStrategyPlan(item) {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+  const id = String(item.id || "").trim();
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    title: String(item.title || "").trim(),
+    summary: String(item.summary || "").trim(),
+    generatedAt: String(item.generatedAt || item.createdAt || "").trim(),
+    createdAt: String(item.createdAt || "").trim(),
+    weeklyCadence: {
+      reels: Number(item.weeklyCadence?.reels || 0),
+      feed: Number(item.weeklyCadence?.feed || 0),
+      story: Number(item.weeklyCadence?.story || 0)
+    },
+    algorithmSignals: Array.isArray(item.algorithmSignals)
+      ? item.algorithmSignals.map((signal) => ({
+          name: String(signal?.name || "").trim(),
+          action: String(signal?.action || "").trim()
+        }))
+      : [],
+    contentPillars: Array.isArray(item.contentPillars)
+      ? item.contentPillars.map((pillar) => ({
+          name: String(pillar?.name || "").trim(),
+          why: String(pillar?.why || "").trim(),
+          cta: String(pillar?.cta || "").trim()
+        }))
+      : [],
+    copyFramework: {
+      hookTemplates: Array.isArray(item.copyFramework?.hookTemplates)
+        ? item.copyFramework.hookTemplates.map((value) => String(value || "").trim()).filter(Boolean)
+        : [],
+      ctaTemplates: Array.isArray(item.copyFramework?.ctaTemplates)
+        ? item.copyFramework.ctaTemplates.map((value) => String(value || "").trim()).filter(Boolean)
+        : []
+    },
+    imagePromptFramework: {
+      prompts: Array.isArray(item.imagePromptFramework?.prompts)
+        ? item.imagePromptFramework.prompts.map((prompt) => ({
+            scenario: String(prompt?.scenario || "").trim(),
+            prompt: String(prompt?.prompt || "").trim()
+          }))
+        : []
+    }
+  };
+}
+
+function getBrandMoodSliderValue() {
+  return Math.min(100, Math.max(0, Number(refs.brandStrategyMoodSlider?.value || 35)));
+}
+
+function getBrandMoodLabel(value) {
+  if (value <= 25) {
+    return "專業";
+  }
+  if (value <= 55) {
+    return "平衡";
+  }
+  if (value <= 80) {
+    return "活潑";
+  }
+  return "俏皮";
+}
+
+function renderBrandStrategyMoodLabel() {
+  if (!refs.brandStrategyMoodValue) {
+    return;
+  }
+  const value = getBrandMoodSliderValue();
+  refs.brandStrategyMoodValue.textContent = `目前語氣：偏${getBrandMoodLabel(value)}（${value}）`;
+}
+
+function composeBrandToneFromMood(baseTone, moodValue) {
+  const base = String(baseTone || "").trim() || "專業親切";
+  return `${base}（語氣校正：${getBrandMoodLabel(moodValue)}）`;
+}
+
+function buildBrandStrategyIgPreviewCells(plan) {
+  const postsByDate = [...state.posts]
+    .sort((a, b) => normalizeDate(a?.date).localeCompare(normalizeDate(b?.date)))
+    .map((post) => ({
+      postId: String(post?.id || "").trim(),
+      type: String(post?.type || "feed").toUpperCase(),
+      title: String(post?.title || "現有貼文").trim() || "貼文主題",
+      caption: [String(post?.date || "").trim(), String(post?.cta || "").trim()]
+        .filter(Boolean)
+        .join("｜")
+    }));
+
+  const cards = postsByDate;
+
+  if (cards.length === 0) {
+    const pillars = Array.isArray(plan?.contentPillars) ? plan.contentPillars : [];
+    const prompts = Array.isArray(plan?.imagePromptFramework?.prompts) ? plan.imagePromptFramework.prompts : [];
+    cards.push(
+      ...pillars.map((pillar, index) => ({
+        postId: "",
+        type: index % 2 === 0 ? "Reels" : "Feed",
+        title: pillar?.name || "主題",
+        caption: pillar?.cta || pillar?.why || ""
+      })),
+      ...prompts.map((prompt, index) => ({
+        postId: "",
+        type: index % 2 === 0 ? "Story" : "Feed",
+        title: prompt?.scenario || "視覺情境",
+        caption: prompt?.prompt || ""
+      }))
+    );
+  }
+
+  while (cards.length < 9) {
+    cards.push({
+      postId: "",
+      type: cards.length % 3 === 0 ? "Reels" : cards.length % 3 === 1 ? "Feed" : "Story",
+      title: `靈感草稿 ${cards.length + 1}`,
+      caption: "AI 產生中，點擊「儲存並產生策略」更新內容。"
+    });
+  }
+  return cards.slice(0, 9);
+}
+
+function triggerMicroFeedback() {
+  if (typeof window !== "undefined" && typeof window.navigator?.vibrate === "function") {
+    window.navigator.vibrate(20);
+  }
+}
+
+function resolveIgPreviewTypeClass(type) {
+  const normalized = String(type || "").trim().toLowerCase();
+  if (normalized.includes("reel")) {
+    return "ig-preview-type--reels";
+  }
+  if (normalized.includes("story")) {
+    return "ig-preview-type--story";
+  }
+  return "ig-preview-type--feed";
+}
+
+function formatIgPreviewBadge(type) {
+  const normalized = String(type || "").trim().toLowerCase();
+  if (normalized.includes("reel")) {
+    return "🎬 Reels";
+  }
+  if (normalized.includes("story")) {
+    return "🟠 Story";
+  }
+  return "🖼 Feed";
+}
+
+function onBrandStrategyOutputClick(event) {
+  const trigger = event.target.closest("[data-action='brand-copy-captions']");
+  if (trigger && brandStrategyPlanState) {
+    const hooks = Array.isArray(brandStrategyPlanState.copyFramework?.hookTemplates)
+      ? brandStrategyPlanState.copyFramework.hookTemplates
+      : [];
+    const ctas = Array.isArray(brandStrategyPlanState.copyFramework?.ctaTemplates)
+      ? brandStrategyPlanState.copyFramework.ctaTemplates
+      : [];
+    const payload = `Hook:\n- ${hooks.join("\n- ")}\n\nCTA:\n- ${ctas.join("\n- ")}`;
+    copyTextValue(payload);
+    return;
+  }
+  const editCellTrigger = event.target.closest("[data-action='brand-edit-cell']");
+  if (editCellTrigger) {
+    const postId = String(editCellTrigger.getAttribute("data-post-id") || "").trim();
+    const post = postId ? state.posts.find((item) => item.id === postId) : null;
+    if (post) {
+      openEditPostDialog(post);
+      return;
+    }
+    alert("此格目前尚未綁定貼文，請先到貼文管理建立對應貼文。");
+    return;
+  }
+  const genImageTrigger = event.target.closest("[data-action='brand-generate-image']");
+  if (genImageTrigger) {
+    const postId = String(genImageTrigger.getAttribute("data-post-id") || "").trim();
+    const post = postId ? state.posts.find((item) => item.id === postId) : null;
+    if (post) {
+      openEditPostDialog(post);
+      return;
+    }
+    alert("此格目前尚未綁定貼文，請先到貼文管理建立對應貼文。");
+  }
+}
+
+function copyTextValue(value) {
+  const text = String(value || "");
+  if (!text) {
+    return;
+  }
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert("已複製到剪貼簿");
+    }).catch(() => {
+      fallbackCopyText(text);
+    });
+    return;
+  }
+  fallbackCopyText(text);
+}
+
+function fallbackCopyText(text) {
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "readonly");
+  area.style.position = "absolute";
+  area.style.left = "-9999px";
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand("copy");
+  document.body.removeChild(area);
+  alert("已複製到剪貼簿");
+}
+
+function copyTextFromField(field) {
+  const value = field && typeof field.value === "string" ? field.value : "";
+  copyTextValue(value);
 }
 
 function openCreatePostDialog() {
@@ -2054,7 +2707,53 @@ function generateWeeklyReport() {
   ];
 
   refs.weeklyReportOutput.value = lines.join("\n");
+  renderWeeklyReportKpiCards(totals, dmStats);
   renderWeeklyActions({ topPosts, triggerStats, intentStats });
+}
+
+function renderWeeklyReportKpiCards(totals, dmStats) {
+  if (!refs.weeklyReportKpiCards) {
+    return;
+  }
+  const cards = [
+    { label: "觸及", value: Number(totals.reach || 0), trend: getTrendHint(Number(totals.reach || 0), 1000) },
+    { label: "收藏率", value: ratioText(totals.saves, totals.reach), trend: getTrendHint(rateValue(totals.saves, totals.reach), 0.04) },
+    { label: "私訊率", value: ratioText(totals.dms, totals.reach), trend: getTrendHint(rateValue(totals.dms, totals.reach), 0.02) },
+    { label: "成交率", value: ratioText(dmStats.closed, dmStats.qualified || dmStats.total), trend: getTrendHint(rateValue(dmStats.closed, dmStats.qualified || dmStats.total), 0.25) }
+  ];
+  refs.weeklyReportKpiCards.innerHTML = cards
+    .map(
+      (item) => `<article class="weekly-kpi-card ${item.trend.className}"><div class="weekly-kpi-label">${escapeHtml(
+        item.label
+      )}</div><div class="weekly-kpi-value">${escapeHtml(String(item.value))}</div><div class="weekly-kpi-trend">${escapeHtml(item.trend.icon)} ${escapeHtml(
+        item.trend.text
+      )}</div></article>`
+    )
+    .join("");
+}
+
+function getTrendHint(value, threshold) {
+  if (Number(value || 0) >= Number(threshold || 0)) {
+    return {
+      icon: "↑",
+      text: "高於目標",
+      className: "trend-up"
+    };
+  }
+  return {
+    icon: "↓",
+    text: "可再優化",
+    className: "trend-down"
+  };
+}
+
+function rateValue(numerator, denominator) {
+  const n = Number(numerator || 0);
+  const d = Number(denominator || 0);
+  if (d <= 0) {
+    return 0;
+  }
+  return n / d;
 }
 
 function rankTopPostsByClickRate(limit) {
@@ -2479,6 +3178,18 @@ function formatDateTime(isoText) {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
+function formatMetricCompact(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) {
+    return "0";
+  }
+  if (number >= 1000) {
+    const compact = Math.round((number / 1000) * 10) / 10;
+    return `${compact}k`;
+  }
+  return String(number);
+}
+
 function getTodayKey() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -2531,6 +3242,7 @@ function resolveProductImageSrc(product) {
     if (byLink) {
       return byLink;
     }
+    queueProductCoverLookup(linkKey);
   }
 
   const pid = extractProductIdFromLink(product.link || "");
@@ -2546,6 +3258,81 @@ function resolveProductImageSrc(product) {
     return "";
   }
   return `assets/media/${fallback}`;
+}
+
+function queueProductCoverLookup(link) {
+  const normalizedLink = toCanonicalShopeeLink(link || "") || String(link || "").trim();
+  if (!normalizedLink) {
+    return;
+  }
+  const retryAt = Number(productCoverLookupRetryAt.get(normalizedLink) || 0);
+  if (retryAt > Date.now()) {
+    return;
+  }
+  if (productCoverLookupInFlight.has(normalizedLink)) {
+    return;
+  }
+  productCoverLookupInFlight.add(normalizedLink);
+  lookupProductCoverByLink(normalizedLink)
+    .then((imageUrl) => {
+      if (!imageUrl) {
+        productCoverLookupRetryAt.set(normalizedLink, Date.now() + 60 * 1000);
+        return;
+      }
+      productCoverMap.set(`link:${normalizedLink}`, imageUrl);
+      const pid = extractProductIdFromLink(normalizedLink);
+      if (pid) {
+        productCoverMap.set(`id:${pid}`, imageUrl);
+      }
+      saveProductCoverCache();
+      renderWeeklyProducts();
+      renderProductsTable();
+    })
+    .catch(() => {
+      productCoverLookupRetryAt.set(normalizedLink, Date.now() + 60 * 1000);
+    })
+    .finally(() => {
+      productCoverLookupInFlight.delete(normalizedLink);
+    });
+}
+
+async function lookupProductCoverByLink(link) {
+  const apiBase = resolveBrandStrategyApiBase();
+  const response = await fetch(`${apiBase}/api/product-preview?url=${encodeURIComponent(link)}`);
+  if (!response.ok) {
+    return "";
+  }
+  const payload = await response.json().catch(() => ({}));
+  return String(payload?.item?.imageUrl || "").trim();
+}
+
+function loadProductCoverCache() {
+  try {
+    const raw = localStorage.getItem(PRODUCT_COVER_CACHE_KEY);
+    if (!raw) {
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return;
+    }
+    Object.entries(parsed).forEach(([key, value]) => {
+      const cacheKey = String(key || "").trim();
+      const cacheVal = String(value || "").trim();
+      if (cacheKey && cacheVal) {
+        productCoverMap.set(cacheKey, cacheVal);
+      }
+    });
+  } catch (_error) {
+  }
+}
+
+function saveProductCoverCache() {
+  try {
+    const payload = Object.fromEntries(productCoverMap.entries());
+    localStorage.setItem(PRODUCT_COVER_CACHE_KEY, JSON.stringify(payload));
+  } catch (_error) {
+  }
 }
 
 function extractProductIdFromLink(link) {

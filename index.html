@@ -3,24 +3,73 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>IG 家具電商前台營運台</title>
-    <link rel="stylesheet" href="styles.css" />
+    <title>IG Growth OS（電商店家版）</title>
+    <link rel="stylesheet" href="styles.css?v=20260331w" />
   </head>
   <body>
     <header class="hero">
       <div class="wrap hero__inner">
         <p class="eyebrow">IG Ops Console</p>
-        <h1>家具內容前台（不用再開 Sheet）</h1>
+        <h1>IG Growth OS（電商店家版）</h1>
         <p class="subtitle">直接在這裡做貼文與商品管理：新增、編輯、狀態更新、匯入匯出。</p>
-        <div class="toolbar">
-          <button id="add-post-btn" class="btn btn-primary" type="button">新增貼文</button>
-          <button id="add-product-btn" class="btn" type="button">新增商品</button>
-          <button id="backup-state-btn" class="btn" type="button">建立備份</button>
-          <button id="restore-state-btn" class="btn" type="button">還原最近備份</button>
-          <button id="export-posts-btn" class="btn" type="button">匯出貼文CSV</button>
-          <button id="export-products-btn" class="btn" type="button">匯出商品CSV</button>
-          <label class="btn file-btn">匯入貼文CSV<input id="import-posts" type="file" accept=".csv" hidden /></label>
-          <label class="btn file-btn">匯入商品CSV<input id="import-products" type="file" accept=".csv" hidden /></label>
+        <div class="status-bar control-card">
+          <div class="status-bar__left">
+            <span class="status-caption">Workspace</span>
+            <select id="tenant-select" class="btn" aria-label="選擇店家"></select>
+            <select id="tenant-role-select" class="btn" aria-label="店家角色">
+              <option value="owner">owner</option>
+              <option value="manager">manager</option>
+              <option value="editor">editor</option>
+              <option value="viewer">viewer</option>
+            </select>
+          </div>
+          <div class="status-bar__right">
+            <select id="login-user-select" class="btn" aria-label="登入帳號">
+              <option value="u_owner">u_owner（owner）</option>
+              <option value="u_editor">u_editor（editor）</option>
+              <option value="u_viewer">u_viewer（viewer）</option>
+            </select>
+            <span id="tenant-role-badge" class="btn subtle-chip" aria-label="目前角色">role: owner</span>
+            <span id="login-status" class="btn subtle-chip" aria-live="polite">後端模式：未連線（使用本機資料）</span>
+          </div>
+        </div>
+
+        <div class="auth-toolbar control-card">
+          <input id="auth-email" type="email" class="btn auth-input" placeholder="註冊/登入 Email" aria-label="註冊登入 email" />
+          <input id="auth-password" type="password" class="btn auth-input" placeholder="密碼（至少 6 碼）" aria-label="註冊登入密碼" />
+          <input id="auth-store-name" type="text" class="btn auth-input" placeholder="註冊店家名稱" aria-label="註冊店家名稱" />
+          <button id="login-connect-btn" class="btn btn-primary" type="button">🔗 登入後端（測試帳號）</button>
+          <button id="auth-register-btn" class="btn" type="button">🪄 註冊帳號</button>
+          <button id="auth-login-btn" class="btn" type="button">🔐 帳密登入</button>
+          <button id="login-sync-btn" class="btn btn-secondary" type="button">🔄 同步目前店家</button>
+          <button id="login-disconnect-btn" class="btn btn-secondary" type="button">⎋ 登出後端</button>
+          <select id="backend-api-base-history" class="btn backend-base-history" aria-label="近期後端 API Base"></select>
+          <button id="backend-api-base-history-clear-btn" class="btn btn-secondary" type="button">🧹 清除歷史</button>
+          <input id="backend-api-base-input" type="url" class="btn auth-input backend-base-input" placeholder="後端 API Base（http://127.0.0.1:8793）" aria-label="後端 API Base" />
+          <button id="backend-api-base-save-btn" class="btn btn-secondary" type="button">💾 儲存 API Base</button>
+          <button id="backend-api-base-reset-btn" class="btn btn-secondary" type="button">♻ 重設 API Base</button>
+        </div>
+
+        <div class="action-hub">
+          <div class="action-hub__main control-card">
+            <button id="add-post-btn" class="btn btn-primary btn-cta-large" type="button">＋ 新增貼文</button>
+            <button id="add-product-btn" class="btn btn-primary btn-cta-large" type="button">＋ 新增商品</button>
+            <button id="add-tenant-btn" class="btn btn-secondary" type="button">🏪 新增店家</button>
+          </div>
+          <div class="action-hub__secondary control-card">
+            <button id="backup-state-btn" class="btn btn-secondary" type="button">🗂 建立備份</button>
+            <button id="restore-state-btn" class="btn btn-secondary" type="button">🧯 還原最近備份</button>
+            <button id="export-posts-btn" class="btn btn-secondary" type="button">📤 匯出貼文CSV</button>
+            <button id="export-products-btn" class="btn btn-secondary" type="button">📤 匯出商品CSV</button>
+            <button id="download-posts-template-btn" class="btn btn-secondary" type="button">⬇ 下載貼文模板</button>
+            <button id="download-products-template-btn" class="btn btn-secondary" type="button">⬇ 下載商品模板</button>
+            <label class="btn btn-secondary file-btn">📥 匯入貼文CSV<input id="import-posts" type="file" accept=".csv" hidden /></label>
+            <label class="btn btn-secondary file-btn">📥 匯入商品CSV<input id="import-products" type="file" accept=".csv" hidden /></label>
+          </div>
+        </div>
+        <div class="import-validation-box" id="import-validation-box" hidden>
+          <strong id="import-validation-title">匯入檢查結果</strong>
+          <ul id="import-validation-list"></ul>
         </div>
       </div>
     </header>
@@ -28,9 +77,47 @@
     <main class="wrap page">
       <section class="kpi-grid" id="kpi-grid"></section>
 
-      <section class="panel">
+      <section class="panel" id="brand-strategy-panel">
+        <div class="panel-head row-between">
+          <h2>品牌策略引擎（新品牌 onboarding）</h2>
+          <div class="actions-inline">
+            <button class="btn btn-secondary" id="brand-strategy-refresh-btn" type="button">↻</button>
+            <button class="btn btn-primary" id="brand-strategy-generate-btn" type="button">儲存品牌策略</button>
+          </div>
+        </div>
+        <p class="subtitle" id="brand-strategy-summary">尚未連線後端，無法讀取品牌策略資料。</p>
+        <div class="form-grid brand-onboarding-grid">
+          <div class="brand-input-col">
+            <label>品牌名稱<input id="brand-strategy-brand-name" placeholder="例如：Kilikuru 家居" /></label>
+            <label>產業<input id="brand-strategy-industry" placeholder="例如：furniture / coffee / retail" /></label>
+            <label>品牌語氣<input id="brand-strategy-tone" placeholder="例如：專業親切、生活感" /></label>
+            <label>關鍵字（逗號分隔）<input id="brand-strategy-keywords" placeholder="例如：小坪數,收納,改造,高質感" /></label>
+          </div>
+          <div class="brand-input-col">
+            <label>目標受眾<input id="brand-strategy-target-audience" placeholder="例如：25-40 歲租屋族、小家庭" /></label>
+            <label>商業目標<input id="brand-strategy-business-goal" placeholder="例如：提升私訊詢單與站外導購" /></label>
+            <label class="full mood-slider-label">語氣調節器
+              <div class="mood-slider-track-wrap">
+                <span class="mood-end mood-end--pro" aria-hidden="true">👔 專業</span>
+                <input id="brand-strategy-mood-slider" type="range" min="0" max="100" value="35" step="1" />
+                <span class="mood-end mood-end--play" aria-hidden="true">🥳 活潑</span>
+              </div>
+              <span class="mood-slider-meta" id="brand-strategy-mood-value">目前語氣：偏專業（35）</span>
+            </label>
+          </div>
+          <label class="full">限制條件<textarea id="brand-strategy-constraints" rows="2" placeholder="例如：每週拍攝資源有限、需控制素材製作成本"></textarea></label>
+          <label class="full">補充說明<textarea id="brand-strategy-notes" rows="2" placeholder="例如：近期重點商品、促銷檔期、競品觀察"></textarea></label>
+        </div>
+        <div id="brand-strategy-output"></div>
+      </section>
+
+      <section class="panel board-panel">
         <div class="panel-head">
           <h2>狀態看板</h2>
+        </div>
+        <div class="board-progress-wrap">
+          <div class="board-progress-bar"><span id="board-progress-fill"></span></div>
+          <p class="board-progress-text" id="board-progress-text">本週完成度 0%</p>
         </div>
         <div class="panel-head">
           <h3 id="weekly-products-title">本週主推商品</h3>
@@ -45,6 +132,12 @@
       <section class="panel">
         <div class="panel-head row-between">
           <h2>貼文管理</h2>
+        </div>
+        <div class="post-control-bar control-card">
+          <div class="post-search-wrap">
+            <span class="search-icon" aria-hidden="true">🔍</span>
+            <input id="filter-post-search" type="search" placeholder="搜尋標題 / CTA / 商品" aria-label="搜尋貼文" />
+          </div>
           <div class="filters">
             <select id="filter-week">
               <option value="all">全部檔期</option>
@@ -67,36 +160,55 @@
             </select>
           </div>
         </div>
+        <div class="actions-inline post-batch-toolbar">
+          <select id="posts-batch-status" class="btn" aria-label="貼文批次狀態">
+            <option value="草稿">草稿</option>
+            <option value="待拍">待拍</option>
+            <option value="待上架">待上架</option>
+            <option value="已發佈">已發佈</option>
+          </select>
+          <button class="btn btn-secondary" id="posts-batch-apply-btn" type="button">批次更新貼文狀態</button>
+          <span class="subtitle" id="posts-batch-summary">尚未選擇貼文</span>
+        </div>
         <div class="table-wrap">
-          <table>
+          <table class="posts-table">
             <thead>
-              <tr><th>日期</th><th>格式</th><th>標題</th><th>商品連結</th><th>狀態</th><th>CTA</th><th>成效數據</th><th>操作</th></tr>
+              <tr><th>日期</th><th>內容</th><th>商品</th><th>狀態</th><th>成效數據</th><th>操作</th></tr>
             </thead>
             <tbody id="posts-tbody"></tbody>
           </table>
         </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-head"><h2>商品管理</h2></div>
+      <section class="panel product-manage-panel">
+        <div class="panel-head row-between"><h2>商品管理</h2></div>
+        <div class="actions-inline product-batch-bar control-card">
+          <select id="products-batch-status" class="btn" aria-label="商品批次狀態">
+            <option value="active">active</option>
+            <option value="paused">paused</option>
+            <option value="archived">archived</option>
+          </select>
+          <button class="btn btn-secondary" id="products-batch-apply-btn" type="button">🪄 批次更新</button>
+          <span class="subtitle" id="products-batch-summary">尚未選擇商品</span>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>商品</th><th>價格</th><th>尺寸</th><th>賣點</th><th>連結</th><th>操作</th></tr>
+              <tr><th>商品</th><th>規格</th><th>賣點摘要</th><th>操作</th></tr>
             </thead>
             <tbody id="products-tbody"></tbody>
           </table>
         </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-head"><h2>DM 轉單引擎</h2></div>
-        <div class="form-grid">
-          <label>來源貼文
-            <select id="dm-post-select"></select>
+      <section class="panel dm-salon-panel">
+        <div class="panel-head dm-title-head"><h2><span class="title-accent"></span>DM 轉單引擎</h2></div>
+        <div class="form-grid dm-salon-grid">
+          <label class="dm-chip-field">來源貼文
+            <select id="dm-post-select" class="dm-chip-select"></select>
           </label>
-          <label>客戶意圖
-            <select id="dm-intent-select">
+          <label class="dm-chip-field">客戶意圖
+            <select id="dm-intent-select" class="dm-chip-select">
               <option value="price">價格</option>
               <option value="size">尺寸</option>
               <option value="material">材質</option>
@@ -105,10 +217,15 @@
               <option value="other">其他</option>
             </select>
           </label>
-          <label class="full">客戶問題摘要<input id="dm-user-question" placeholder="例如：有沒有 2500 內、玄關可用的款式？" /></label>
+          <label class="full">客戶問題摘要
+            <div class="dm-question-shell">
+              <span class="dm-avatar" aria-hidden="true">👤</span>
+              <input id="dm-user-question" placeholder="例如：有沒有 2500 內、玄關可用的款式？" />
+            </div>
+          </label>
           <div class="actions full">
-            <button class="btn btn-primary" id="dm-generate-btn" type="button">生成 DM 腳本</button>
-            <button class="btn" id="dm-copy-btn" type="button">複製腳本</button>
+            <button class="btn btn-primary dm-generate-btn" id="dm-generate-btn" type="button">✨ 生成 DM 腳本</button>
+            <button class="btn btn-secondary" id="dm-copy-btn" type="button">複製腳本</button>
           </div>
           <label class="full">DM 腳本<textarea id="dm-script-output" rows="6" readonly></textarea></label>
         </div>
@@ -122,22 +239,60 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="comments-panel">
         <div class="panel-head row-between">
-          <h2>Growth Analyst 週報引擎</h2>
+          <h2><span class="title-accent"></span>協作留言與 @提及</h2>
           <div class="actions-inline">
-            <button class="btn btn-primary" id="weekly-report-btn" type="button">生成本週報告</button>
-            <button class="btn" id="weekly-report-copy-btn" type="button">複製報告</button>
+            <button class="btn" id="comments-refresh-btn" type="button">重新整理留言</button>
           </div>
         </div>
+        <div class="actions-inline">
+          <select id="comments-resource-type" class="btn" aria-label="留言資源類型">
+            <option value="post">貼文</option>
+            <option value="product">商品</option>
+          </select>
+          <select id="comments-resource-id" class="btn" aria-label="留言資源"></select>
+        </div>
+        <div class="comment-composer">
+          <label class="full">留言內容（可用 @u_owner / @u_editor）<textarea id="comments-body" rows="3" placeholder="例如：@u_owner 這篇 CTA 建議改成限時折扣"></textarea></label>
+          <div class="comment-composer-actions">
+            <button class="btn btn-primary" id="comments-submit-btn" type="button">送出留言</button>
+          </div>
+        </div>
+        <div id="comments-list"></div>
+      </section>
+
+      <section class="panel weekly-report-panel">
+        <div class="panel-head row-between">
+          <h2><span class="title-accent"></span>Growth Analyst 週報引擎</h2>
+          <div class="actions-inline">
+            <button class="btn btn-primary" id="weekly-report-btn" type="button">生成本週報告</button>
+            <button class="btn btn-secondary" id="weekly-report-copy-btn" type="button">複製報告</button>
+          </div>
+        </div>
+        <div id="weekly-report-kpi-cards" class="weekly-report-kpi-cards"></div>
         <label>週報輸出<textarea id="weekly-report-output" rows="10" readonly></textarea></label>
         <div class="panel-head"><h3>下週建議行動</h3></div>
         <ul id="weekly-actions"></ul>
       </section>
 
-      <section class="panel">
+      <section class="panel agent-runs-panel">
         <div class="panel-head row-between">
-          <h2>每日 15 分鐘 SOP</h2>
+          <h2><span class="title-accent"></span>Agent 執行紀錄（當前店家）</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>時間</th><th>Agent</th><th>動作</th><th>狀態</th><th>摘要</th></tr>
+            </thead>
+            <tbody id="agent-runs-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel sop-panel">
+        <div class="panel-head row-between">
+          <h2>🕒 每日 15 分鐘 SOP</h2>
           <button class="btn" id="sop-reset-btn" type="button">重置今日勾選</button>
         </div>
         <p class="subtitle">每天照這 6 步跑，確保內容、私訊、轉單都在推進。</p>
@@ -204,6 +359,6 @@
       </form>
     </dialog>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=20260331w"></script>
   </body>
 </html>

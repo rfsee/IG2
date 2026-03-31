@@ -5,19 +5,23 @@ cd /d "%~dp0"
 set "MAX_ATTEMPTS=3"
 set "HEALTH_CHECK_RETRIES=6"
 set "ATTEMPT=0"
+set "POWERSHELL_OK="
 
 set "PYTHON_OK="
 where python >nul 2>nul && set "PYTHON_OK=1"
 if not defined PYTHON_OK where py >nul 2>nul && set "PYTHON_OK=1"
 if not defined PYTHON_OK goto :python_missing
+where powershell >nul 2>nul && set "POWERSHELL_OK=1"
 
 :retry_start
 set /a ATTEMPT+=1
 call :pick_port
-if not defined PORT goto :pick_port_failed
+if not defined PORT set "PORT=4173"
 
 echo [INFO] Attempt !ATTEMPT!/%MAX_ATTEMPTS% - starting dashboard server on port !PORT!...
 start "IG Dashboard Server :!PORT!" cmd /k ""%~dp0run-server.bat" !PORT!"
+
+if not defined POWERSHELL_OK goto :startup_open_only
 
 set "CHECK=0"
 :health_loop
@@ -33,6 +37,13 @@ if !ATTEMPT! lss %MAX_ATTEMPTS% (
 )
 
 goto :startup_failed
+
+:startup_open_only
+echo [WARN] PowerShell not available. Skipping health check and opening browser directly.
+timeout /t 2 /nobreak >nul
+echo [OK] Attempting to open: http://127.0.0.1:!PORT!/index.html
+start "" "http://127.0.0.1:!PORT!/index.html"
+exit /b 0
 
 :startup_ok
 echo [OK] Dashboard is ready: http://127.0.0.1:!PORT!/index.html
@@ -60,5 +71,9 @@ exit /b 1
 
 :pick_port
 set "PORT="
+if not defined POWERSHELL_OK (
+  set "PORT=4173"
+  exit /b 0
+)
 for /f %%P in ('powershell -NoProfile -Command "$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,0); $listener.Start(); $p = $listener.LocalEndpoint.Port; $listener.Stop(); Write-Output $p"') do set "PORT=%%P"
 exit /b 0
