@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ig2-postgres
+    environment:
+      POSTGRES_DB: ig_growth_os
+      POSTGRES_USER: ig2
+      POSTGRES_PASSWORD: ig2_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - ig2_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ig2 -d ig_growth_os"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  ig2_pgdata:
