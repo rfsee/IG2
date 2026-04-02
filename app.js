@@ -9,6 +9,7 @@ const PRODUCT_COVER_CACHE_KEY = "ig_ops_product_cover_cache_v1";
 const BRAND_STRATEGY_API_BASE_STORAGE_KEY = "ig_ops_backend_api_base_v1";
 const BRAND_STRATEGY_AUTH_SESSION_KEY = "ig_ops_auth_session_v1";
 const BRAND_STRATEGY_API_BASE_DEFAULT = "http://127.0.0.1:8793";
+const RUNTIME_CONFIG = typeof window !== "undefined" ? window.__IG2_RUNTIME_CONFIG__ || {} : {};
 const SHOPEE_SHOP_ID = "179481064";
 const STATUS_ORDER = ["草稿", "待拍", "待上架", "已發佈"];
 const LEGACY_PRODUCT_TERMS = ["超薄鞋櫃", "翻斗鞋櫃", "羊羔絨椅", "泰迪熊羊羔絨椅"];
@@ -1511,6 +1512,10 @@ function resolveBrandStrategyApiBase() {
   const fromStorage = String(localStorage.getItem(BRAND_STRATEGY_API_BASE_STORAGE_KEY) || "").trim();
   if (fromStorage) {
     return fromStorage.replace(/\/+$/, "");
+  }
+  const fromRuntimeConfig = String(RUNTIME_CONFIG.BACKEND_API_BASE || "").trim();
+  if (fromRuntimeConfig) {
+    return fromRuntimeConfig.replace(/\/+$/, "");
   }
   return BRAND_STRATEGY_API_BASE_DEFAULT;
 }

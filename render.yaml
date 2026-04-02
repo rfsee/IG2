@@ -1,0 +1,22 @@
+﻿services:
+  - type: web
+    name: ig2-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DATA_PROVIDER
+        value: postgres
+      - key: AUTH_PROVIDER
+        value: dev
+      - key: AUTH_REGISTER_ENABLED
+        value: "true"
+      - key: AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX
+        sync: false
+      - key: DATABASE_URL
+        sync: false
