@@ -1,3 +1,3 @@
-﻿window.__IG2_RUNTIME_CONFIG__ = window.__IG2_RUNTIME_CONFIG__ || {
-  BACKEND_API_BASE: ""
+window.__IG2_RUNTIME_CONFIG__ = window.__IG2_RUNTIME_CONFIG__ || {
+  BACKEND_API_BASE: "https://ig2-backend.onrender.com"
 };
