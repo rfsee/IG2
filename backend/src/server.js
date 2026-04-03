@@ -33,6 +33,16 @@ const server = createServer(async (req, res) => {
 
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
+    if (req.method === "GET" && url.pathname === "/") {
+      return sendJson(res, 200, {
+        ok: true,
+        service: "ig-growth-os-core-api",
+        message: "IG2 backend is running. Use /health for status.",
+        healthUrl: "/health",
+        docsHint: "Use the frontend site to interact with the product UI."
+      });
+    }
+
     if (req.method === "GET" && url.pathname === "/health") {
       return sendJson(res, 200, {
         ok: true,
