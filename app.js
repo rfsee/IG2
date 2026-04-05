@@ -8,6 +8,7 @@ const PRODUCT_COVERS_JSON_PATH = "assets/product_covers.json";
 const PRODUCT_COVER_CACHE_KEY = "ig_ops_product_cover_cache_v1";
 const BRAND_STRATEGY_API_BASE_STORAGE_KEY = "ig_ops_backend_api_base_v1";
 const BRAND_STRATEGY_AUTH_SESSION_KEY = "ig_ops_auth_session_v1";
+const TENANT_SELECTION_STORAGE_KEY = "ig_ops_tenants_v1";
 const BRAND_STRATEGY_API_BASE_DEFAULT = "http://127.0.0.1:8793";
 const RUNTIME_CONFIG = typeof window !== "undefined" ? window.__IG2_RUNTIME_CONFIG__ || {} : {};
 const SHOPEE_SHOP_ID = "179481064";
@@ -185,6 +186,15 @@ const refs = {
   brandStrategyConstraints: document.getElementById("brand-strategy-constraints"),
   brandStrategyNotes: document.getElementById("brand-strategy-notes"),
   brandStrategyOutput: document.getElementById("brand-strategy-output"),
+  authEmail: document.getElementById("auth-email"),
+  authPassword: document.getElementById("auth-password"),
+  authStoreName: document.getElementById("auth-store-name"),
+  authRegisterBtn: document.getElementById("auth-register-btn"),
+  authLoginBtn: document.getElementById("auth-login-btn"),
+  authDisconnectBtn: document.getElementById("login-disconnect-btn"),
+  loginStatus: document.getElementById("login-status"),
+  tenantRoleBadge: document.getElementById("tenant-role-badge"),
+  activeTenantName: document.getElementById("active-tenant-name"),
   weeklyReportBtn: document.getElementById("weekly-report-btn"),
   weeklyReportCopyBtn: document.getElementById("weekly-report-copy-btn"),
   weeklyReportKpiCards: document.getElementById("weekly-report-kpi-cards"),
@@ -205,17 +215,22 @@ const refs = {
 
 loadProductCoverCache();
 bindEvents();
+initAuthUi();
 if (loadResult.needsPersist) {
   persistStateSnapshot(state);
 }
 syncDraftTitlesWithProducts(true);
 renderAll();
-syncBrandStrategyFromBackend().catch(() => {
-  if (refs.brandStrategySummary) {
-    refs.brandStrategySummary.textContent = "品牌策略暫時離線，請確認後端服務已啟動。";
-  }
-  renderBrandStrategyPanel();
-});
+if (hasConnectedAuthSession()) {
+  syncBrandStrategyFromBackend().catch(() => {
+    if (refs.brandStrategySummary) {
+      refs.brandStrategySummary.textContent = "品牌策略暫時離線，請確認登入狀態與後端服務。";
+    }
+    renderBrandStrategyPanel();
+  });
+} else if (refs.brandStrategySummary) {
+  refs.brandStrategySummary.textContent = "請先登入以讀取品牌策略與雲端資料。";
+}
 if (!hasStoredState) {
   hydrateFromCsvOnFirstLoad();
 }
@@ -276,6 +291,10 @@ function bindEvents() {
   refs.productsTbody.addEventListener("click", onProductsTableClick);
   refs.postsTbody.addEventListener("change", onPostStatusChange);
   refs.postsTbody.addEventListener("change", onPostMetricChange);
+
+  refs.authRegisterBtn?.addEventListener("click", onAuthRegister);
+  refs.authLoginBtn?.addEventListener("click", onAuthLogin);
+  refs.authDisconnectBtn?.addEventListener("click", onAuthDisconnect);
 
   refs.filterWeek.addEventListener("change", renderAll);
   refs.filterType.addEventListener("change", renderAll);
@@ -1482,6 +1501,9 @@ function hydrateBrandStrategyForm(intake) {
 async function requestBrandStrategyApi(method, path, body) {
   const apiBase = resolveBrandStrategyApiBase();
   const auth = resolveBrandStrategyAuthContext();
+  if (!auth.token || !auth.tenantId) {
+    throw new Error("auth_required");
+  }
   const headers = {
     "content-type": "application/json",
     authorization: `Bearer ${auth.token}`,
@@ -1520,33 +1542,159 @@ function resolveBrandStrategyApiBase() {
   return BRAND_STRATEGY_API_BASE_DEFAULT;
 }
 
+function initAuthUi() {
+  updateAuthUi(loadAuthSession());
+}
+
+function loadAuthSession() {
+  try {
+    const raw = localStorage.getItem(BRAND_STRATEGY_AUTH_SESSION_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !parsed.connected || !parsed.token) {
+      return null;
+    }
+    return {
+      connected: true,
+      actorId: String(parsed.actorId || "").trim(),
+      token: String(parsed.token || "").trim(),
+      items: Array.isArray(parsed.items) ? parsed.items : [],
+      activeTenantId: String(parsed.activeTenantId || "").trim(),
+      activeRole: String(parsed.activeRole || "").trim(),
+      activeTenantName: String(parsed.activeTenantName || "").trim()
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
+function persistAuthSession(payload) {
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  const activeItem = items.find((item) => String(item?.tenantId || "") === String(payload?.activeTenantId || "")) || items[0] || null;
+  const session = {
+    connected: true,
+    actorId: String(payload?.actorId || "").trim(),
+    token: String(payload?.token || "").trim(),
+    items,
+    activeTenantId: String(activeItem?.tenantId || payload?.activeTenantId || "").trim(),
+    activeRole: String(activeItem?.role || "").trim(),
+    activeTenantName: String(activeItem?.tenantName || "").trim()
+  };
+  localStorage.setItem(BRAND_STRATEGY_AUTH_SESSION_KEY, JSON.stringify(session));
+  localStorage.setItem(
+    TENANT_SELECTION_STORAGE_KEY,
+    JSON.stringify({ activeTenantId: session.activeTenantId, items: session.items })
+  );
+  updateAuthUi(session);
+  return session;
+}
+
+function clearAuthSession() {
+  localStorage.removeItem(BRAND_STRATEGY_AUTH_SESSION_KEY);
+  localStorage.removeItem(TENANT_SELECTION_STORAGE_KEY);
+  updateAuthUi(null);
+}
+
+function updateAuthUi(session) {
+  const connected = Boolean(session?.connected && session?.token);
+  if (refs.loginStatus) {
+    refs.loginStatus.textContent = connected ? "後端模式：已登入雲端" : "後端模式：未登入";
+  }
+  if (refs.tenantRoleBadge) {
+    refs.tenantRoleBadge.textContent = `role: ${connected ? String(session?.activeRole || "owner") : "guest"}`;
+  }
+  if (refs.activeTenantName) {
+    refs.activeTenantName.textContent = `店家：${connected ? String(session?.activeTenantName || "未選擇") : "未登入"}`;
+  }
+  if (refs.authStoreName) {
+    refs.authStoreName.disabled = connected;
+  }
+  if (refs.authRegisterBtn) {
+    refs.authRegisterBtn.disabled = connected;
+  }
+  if (refs.authDisconnectBtn) {
+    refs.authDisconnectBtn.disabled = !connected;
+  }
+}
+
+function hasConnectedAuthSession() {
+  return Boolean(loadAuthSession()?.token);
+}
+
+async function onAuthRegister() {
+  try {
+    const email = String(refs.authEmail?.value || "").trim();
+    const password = String(refs.authPassword?.value || "").trim();
+    const storeName = String(refs.authStoreName?.value || "").trim();
+    const payload = await requestAuthApi("/api/auth/register", { email, password, storeName });
+    const session = persistAuthSession(payload);
+    if (refs.brandStrategySummary) {
+      refs.brandStrategySummary.textContent = `已登入 ${session.activeTenantName || "新店家"}，正在同步品牌策略。`;
+    }
+    await syncBrandStrategyFromBackend().catch(() => {
+      if (refs.brandStrategySummary) {
+        refs.brandStrategySummary.textContent = "註冊成功，但品牌策略同步失敗，請稍後重試。";
+      }
+    });
+    alert("註冊成功，已登入雲端帳號。");
+  } catch (error) {
+    alert(`註冊失敗：${String(error?.message || error)}`);
+  }
+}
+
+async function onAuthLogin() {
+  try {
+    const email = String(refs.authEmail?.value || "").trim();
+    const password = String(refs.authPassword?.value || "").trim();
+    const payload = await requestAuthApi("/api/auth/login", { email, password });
+    const session = persistAuthSession(payload);
+    if (refs.brandStrategySummary) {
+      refs.brandStrategySummary.textContent = `已登入 ${session.activeTenantName || "目前店家"}，正在同步品牌策略。`;
+    }
+    await syncBrandStrategyFromBackend().catch(() => {
+      if (refs.brandStrategySummary) {
+        refs.brandStrategySummary.textContent = "登入成功，但品牌策略同步失敗，請稍後重試。";
+      }
+    });
+    alert("登入成功。");
+  } catch (error) {
+    alert(`登入失敗：${String(error?.message || error)}`);
+  }
+}
+
+function onAuthDisconnect() {
+  clearAuthSession();
+  if (refs.brandStrategySummary) {
+    refs.brandStrategySummary.textContent = "已登出。請重新登入以讀取品牌策略與雲端資料。";
+  }
+}
+
+async function requestAuthApi(path, body) {
+  const apiBase = resolveBrandStrategyApiBase();
+  let response;
+  try {
+    response = await fetch(`${apiBase}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+  } catch (_error) {
+    throw new Error(`auth_network_error (${apiBase})`);
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(String(payload.error || `auth_request_failed_${response.status}`));
+  }
+  return payload;
+}
+
 function resolveBrandStrategyAuthContext() {
-  let token = "dev_user_u_owner";
-  let tenantId = "tenant_default";
-  try {
-    const rawSession = localStorage.getItem(BRAND_STRATEGY_AUTH_SESSION_KEY);
-    if (rawSession) {
-      const parsed = JSON.parse(rawSession);
-      if (parsed?.connected && parsed?.token) {
-        token = String(parsed.token || token).trim() || token;
-      }
-    }
-  } catch (_error) {
-  }
-  try {
-    const rawTenant = localStorage.getItem("ig_ops_tenants_v1");
-    if (rawTenant) {
-      const parsed = JSON.parse(rawTenant);
-      const active = String(parsed?.activeTenantId || "").trim();
-      if (active) {
-        tenantId = active;
-      }
-    }
-  } catch (_error) {
-  }
+  const session = loadAuthSession();
   return {
-    token,
-    tenantId
+    token: String(session?.token || "").trim(),
+    tenantId: String(session?.activeTenantId || "").trim()
   };
 }
 
