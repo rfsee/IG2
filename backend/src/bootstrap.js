@@ -3,7 +3,7 @@ import { createRepository } from "./repository/index.js";
 
 export async function bootstrapCore() {
   const repository = await createRepository();
-  const authProvider = createAuthProvider();
+  const authProvider = createAuthProvider(repository);
   const health = await repository.healthCheck();
 
   return {
