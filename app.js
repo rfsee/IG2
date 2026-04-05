@@ -1525,6 +1525,9 @@ async function requestBrandStrategyApi(method, path, body) {
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401) {
+      handleAuthExpired();
+    }
     throw new Error(String(payload.error || `brand_strategy_request_failed_${response.status}`));
   }
   return payload;
@@ -1626,6 +1629,13 @@ function clearAuthSession() {
   updateAuthUi(null);
 }
 
+function handleAuthExpired() {
+  clearAuthSession();
+  if (refs.brandStrategySummary) {
+    refs.brandStrategySummary.textContent = "登入已失效，請重新登入後再操作。";
+  }
+}
+
 function updateAuthUi(session) {
   const connected = Boolean(session?.connected && session?.activeTenantId);
   if (refs.loginStatus) {
@@ -1723,6 +1733,9 @@ async function requestAuthApi(path, body) {
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401) {
+      handleAuthExpired();
+    }
     throw new Error(String(payload.error || `auth_request_failed_${response.status}`));
   }
   return payload;
