@@ -738,6 +738,7 @@ export function createMemoryRepository() {
       });
     },
     async resolveAuthSession(tokenHash) {
+      purgeExpiredMemoryAuthState();
       const hit = authSessionStore.get(String(tokenHash || ""));
       if (!hit) {
         return null;
@@ -753,6 +754,7 @@ export function createMemoryRepository() {
       authSessionStore.delete(String(tokenHash || ""));
     },
     async consumeAuthThrottle(identifier, limit, windowMs) {
+      purgeExpiredMemoryAuthState();
       const key = String(identifier || "unknown");
       const now = Date.now();
       const existing = authThrottleStore.get(key);
@@ -832,6 +834,21 @@ function timingSafeEqualHex(left, right) {
     return false;
   }
   return timingSafeEqual(leftBuf, rightBuf);
+}
+
+function purgeExpiredMemoryAuthState() {
+  const now = Date.now();
+  for (const [key, value] of authSessionStore.entries()) {
+    const expiresAtMs = Date.parse(String(value?.expiresAt || ""));
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now) {
+      authSessionStore.delete(key);
+    }
+  }
+  for (const [key, value] of authThrottleStore.entries()) {
+    if (!value || now >= Number(value.resetAt || 0)) {
+      authThrottleStore.delete(key);
+    }
+  }
 }
 
 function bootstrapMainAccountBinding() {

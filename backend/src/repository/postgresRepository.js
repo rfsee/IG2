@@ -12,6 +12,7 @@ export function createPostgresRepository() {
   }
 
   const pool = new Pool({ connectionString });
+  let authCleanupTriggeredAt = 0;
 
   return {
     kind: "postgres",
@@ -1455,6 +1456,9 @@ export function createPostgresRepository() {
       );
     },
     async resolveAuthSession(tokenHash) {
+      await maybePurgeExpiredAuthState(pool, () => {
+        authCleanupTriggeredAt = Date.now();
+      }, authCleanupTriggeredAt);
       const { rows } = await pool.query(
         `UPDATE bridge.auth_sessions
          SET last_seen_at = NOW()
@@ -1473,6 +1477,9 @@ export function createPostgresRepository() {
       );
     },
     async consumeAuthThrottle(identifier, limit, windowMs) {
+      await maybePurgeExpiredAuthState(pool, () => {
+        authCleanupTriggeredAt = Date.now();
+      }, authCleanupTriggeredAt);
       const key = String(identifier || "unknown");
       const normalizedLimit = Math.max(Number(limit || 10), 1);
       const windowSeconds = Math.max(Math.ceil(Number(windowMs || 60_000) / 1000), 1);
@@ -1664,6 +1671,19 @@ async function safeRollback(client) {
   } catch (rollbackError) {
     console.warn("Rollback failed", rollbackError);
   }
+}
+
+async function maybePurgeExpiredAuthState(pool, onCleanup, lastTriggeredAt) {
+  const now = Date.now();
+  if (now - Number(lastTriggeredAt || 0) < 5 * 60 * 1000) {
+    return;
+  }
+  await pool.query(`DELETE FROM bridge.auth_sessions WHERE expires_at <= NOW()`);
+  await pool.query(
+    `DELETE FROM bridge.auth_rate_limits
+     WHERE window_started_at <= NOW() - INTERVAL '10 minutes'`
+  );
+  onCleanup();
 }
 
 function normalizePostPayload(input, current = {}) {
