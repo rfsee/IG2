@@ -189,6 +189,28 @@ const server = createServer(async (req, res) => {
         passwordMinLength: AUTH_PASSWORD_MIN_LENGTH
       });
       const items = await services.repository.listVisibleTenants(registered.actorId);
+      const primaryTenant = items[0];
+      if (primaryTenant?.tenantId) {
+        await writeAudit(
+          services.repository,
+          {
+            actorId: registered.actorId,
+            role: String(primaryTenant.role || "owner"),
+            tenantId: String(primaryTenant.tenantId),
+            requestId: String(req.headers["x-request-id"] || randomRequestId()),
+            traceId: String(req.headers["x-trace-id"] || req.headers["x-request-id"] || randomRequestId()),
+            parentSpanId: String(req.headers["x-parent-span-id"] || "")
+          },
+          "auth.register",
+          "auth",
+          registered.actorId,
+          {
+            email,
+            ...buildRequestMetadata(req, url)
+          },
+          req.socket?.remoteAddress || ""
+        );
+      }
       return sendJson(res, 201, await buildAuthResponse(services, registered.actorId, items));
     }
 
@@ -204,6 +226,28 @@ const server = createServer(async (req, res) => {
         passwordMinLength: AUTH_PASSWORD_MIN_LENGTH
       });
       const items = await services.repository.listVisibleTenants(loggedIn.actorId);
+      const primaryTenant = items[0];
+      if (primaryTenant?.tenantId) {
+        await writeAudit(
+          services.repository,
+          {
+            actorId: loggedIn.actorId,
+            role: String(primaryTenant.role || "owner"),
+            tenantId: String(primaryTenant.tenantId),
+            requestId: String(req.headers["x-request-id"] || randomRequestId()),
+            traceId: String(req.headers["x-trace-id"] || req.headers["x-request-id"] || randomRequestId()),
+            parentSpanId: String(req.headers["x-parent-span-id"] || "")
+          },
+          "auth.login",
+          "auth",
+          loggedIn.actorId,
+          {
+            email,
+            ...buildRequestMetadata(req, url)
+          },
+          req.socket?.remoteAddress || ""
+        );
+      }
       return sendJson(res, 200, await buildAuthResponse(services, loggedIn.actorId, items));
     }
 
@@ -214,7 +258,28 @@ const server = createServer(async (req, res) => {
       }
       if (typeof services?.authProvider?.revokeToken === "function") {
         const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+        const actorId = await services.authProvider.resolveActor(req);
+        const items = await services.repository.listVisibleTenants(actorId);
+        const primaryTenant = items[0];
         await services.authProvider.revokeToken(token);
+        if (primaryTenant?.tenantId) {
+          await writeAudit(
+            services.repository,
+            {
+              actorId,
+              role: String(primaryTenant.role || "owner"),
+              tenantId: String(primaryTenant.tenantId),
+              requestId: String(req.headers["x-request-id"] || randomRequestId()),
+              traceId: String(req.headers["x-trace-id"] || req.headers["x-request-id"] || randomRequestId()),
+              parentSpanId: String(req.headers["x-parent-span-id"] || "")
+            },
+            "auth.logout",
+            "auth",
+            actorId,
+            buildRequestMetadata(req, url),
+            req.socket?.remoteAddress || ""
+          );
+        }
       }
       return sendJson(res, 200, { ok: true });
     }
