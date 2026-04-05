@@ -95,8 +95,8 @@ AUTH_SESSION_TTL_DAYS=3
 AUTH_PASSWORD_MIN_LENGTH=10
 ```
 
-The backend now issues opaque `ig2_...` session tokens in `AUTH_PROVIDER=local` mode instead of predictable dev tokens.
-Public auth is additionally protected by persistent auth throttling, server-side logout revocation, minimized `/health`, and request body size limits.
+The backend now issues opaque `ig2_...` session tokens in `AUTH_PROVIDER=local` mode and also sets an `HttpOnly` secure cookie for browser sessions.
+Public auth is additionally protected by persistent auth throttling, server-side logout revocation, minimized `/health`, request body size limits, and browser-side CSP/referrer policy.
 
 Render service settings (from this repo):
 - Root Directory: `backend`
