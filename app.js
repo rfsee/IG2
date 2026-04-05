@@ -1527,13 +1527,16 @@ async function requestBrandStrategyApi(method, path, body) {
 }
 
 function resolveBrandStrategyApiBase() {
-  const query = new URLSearchParams(window.location.search).get("backend_api_base");
-  if (query) {
-    return String(query).replace(/\/+$/, "");
-  }
-  const fromStorage = String(localStorage.getItem(BRAND_STRATEGY_API_BASE_STORAGE_KEY) || "").trim();
-  if (fromStorage) {
-    return fromStorage.replace(/\/+$/, "");
+  const allowPublicOverride = Boolean(RUNTIME_CONFIG.ALLOW_PUBLIC_API_BASE_OVERRIDE);
+  if (allowPublicOverride) {
+    const query = new URLSearchParams(window.location.search).get("backend_api_base");
+    if (query) {
+      return String(query).replace(/\/+$/, "");
+    }
+    const fromStorage = String(localStorage.getItem(BRAND_STRATEGY_API_BASE_STORAGE_KEY) || "").trim();
+    if (fromStorage) {
+      return fromStorage.replace(/\/+$/, "");
+    }
   }
   const fromRuntimeConfig = String(RUNTIME_CONFIG.BACKEND_API_BASE || "").trim();
   if (fromRuntimeConfig) {
@@ -1664,10 +1667,18 @@ async function onAuthLogin() {
   }
 }
 
-function onAuthDisconnect() {
-  clearAuthSession();
-  if (refs.brandStrategySummary) {
-    refs.brandStrategySummary.textContent = "已登出。請重新登入以讀取品牌策略與雲端資料。";
+async function onAuthDisconnect() {
+  const session = loadAuthSession();
+  try {
+    if (session?.token) {
+      await requestAuthLogout(session.token);
+    }
+  } catch (_error) {
+  } finally {
+    clearAuthSession();
+    if (refs.brandStrategySummary) {
+      refs.brandStrategySummary.textContent = "已登出。請重新登入以讀取品牌策略與雲端資料。";
+    }
   }
 }
 
@@ -1688,6 +1699,16 @@ async function requestAuthApi(path, body) {
     throw new Error(String(payload.error || `auth_request_failed_${response.status}`));
   }
   return payload;
+}
+
+async function requestAuthLogout(token) {
+  const apiBase = resolveBrandStrategyApiBase();
+  await fetch(`${apiBase}/api/auth/logout`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${String(token || "").trim()}`
+    }
+  });
 }
 
 function resolveBrandStrategyAuthContext() {
