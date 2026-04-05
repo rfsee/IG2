@@ -32,15 +32,16 @@ Set `config.js` to your backend URL:
 
 ```js
 window.__IG2_RUNTIME_CONFIG__ = {
-  BACKEND_API_BASE: "https://your-render-backend.onrender.com"
+  BACKEND_API_BASE: "https://your-render-backend.onrender.com",
+  ALLOW_PUBLIC_API_BASE_OVERRIDE: false
 };
 ```
 
 Frontend backend API base resolution order:
-1. `?backend_api_base=...`
-2. localStorage key `ig_ops_backend_api_base_v1`
-3. `window.__IG2_RUNTIME_CONFIG__.BACKEND_API_BASE`
-4. `http://127.0.0.1:8793`
+1. `window.__IG2_RUNTIME_CONFIG__.BACKEND_API_BASE`
+2. `http://127.0.0.1:8793`
+
+For public deployments, `ALLOW_PUBLIC_API_BASE_OVERRIDE` should stay `false` so the frontend does not send auth tokens to arbitrary backend URLs.
 
 ## Backend deployment
 
@@ -55,6 +56,8 @@ AUTH_REGISTER_ENABLED=true
 AUTH_REGISTER_EMAIL_ALLOWLIST=tester1@example.com,tester2@example.com
 AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX=@yourcompany\\.com$
 CORS_ALLOWED_ORIGINS=https://rfsee.github.io
+AUTH_SESSION_TTL_DAYS=3
+AUTH_PASSWORD_MIN_LENGTH=10
 DATABASE_URL=postgres://...
 ```
 
@@ -88,9 +91,12 @@ AUTH_REGISTER_EMAIL_ALLOWLIST=
 AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX=
 AUTH_PROVIDER=local
 CORS_ALLOWED_ORIGINS=https://rfsee.github.io
+AUTH_SESSION_TTL_DAYS=3
+AUTH_PASSWORD_MIN_LENGTH=10
 ```
 
 The backend now issues opaque `ig2_...` session tokens in `AUTH_PROVIDER=local` mode instead of predictable dev tokens.
+Public auth is additionally protected by persistent auth throttling, server-side logout revocation, minimized `/health`, and request body size limits.
 
 Render service settings (from this repo):
 - Root Directory: `backend`
@@ -111,9 +117,7 @@ npm run seed:dev
 
 Then switch backend to `DATA_PROVIDER=postgres` and set `DATABASE_URL`.
 
-Seeded users:
-- `owner@example.com` / `123456`
-- `editor@example.com` / `123456`
+Legacy seeded users should not be used for public testing. Prefer freshly created accounts with the current password policy.
 
 ## Internal-only registration
 
@@ -134,7 +138,7 @@ AUTH_REGISTER_ENABLED=false
 
 - Render free web service may sleep when idle and cold-start on the next request
 - Neon free is suitable for internal testing, not long-term production scale
-- If the frontend was previously used locally, clear saved API base in the UI or localStorage before testing the deployed site
+- Public deployments should keep frontend API-base override disabled and avoid publishing any legacy shared credentials
 
 ## Executable rollout checklist
 
