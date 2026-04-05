@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import pg from "pg";
 import { createHttpError } from "../errors.js";
 import { buildDailyWorkspacePayload } from "../workspace/dailyWorkspace.js";
@@ -1416,8 +1416,19 @@ export function createPostgresRepository() {
         [email]
       );
       const hit = rows[0];
-      if (!hit || String(hit.passwordHash || "") !== hashPassword(password)) {
+      if (!hit || !verifyPassword(password, hit.passwordHash)) {
         throw createHttpError("invalid_credentials", 401);
+      }
+      if (needsPasswordRehash(hit.passwordHash)) {
+        await pool.query(
+          `UPDATE bridge.user_credentials c
+           SET password_hash = $2,
+               updated_at = NOW()
+           FROM bridge.users u
+           WHERE c.user_id = u.id
+             AND lower(u.email) = $1`,
+          [email, hashPassword(password)]
+        );
       }
 
       return {
@@ -1445,6 +1456,13 @@ export function createPostgresRepository() {
         [String(tokenHash || "")]
       );
       return rows[0] || null;
+    },
+    async deleteAuthSession(tokenHash) {
+      await pool.query(
+        `DELETE FROM bridge.auth_sessions
+         WHERE token_hash = $1`,
+        [String(tokenHash || "")]
+      );
     },
     async appendAuditEvent(event) {
       await pool.query(
@@ -1544,7 +1562,38 @@ function normalizeEmail(value) {
 }
 
 function hashPassword(password) {
-  return createHash("sha256").update(String(password || "")).digest("hex");
+  const salt = randomBytes(16).toString("hex");
+  const derived = scryptSync(String(password || ""), salt, 64).toString("hex");
+  return `s1$${salt}$${derived}`;
+}
+
+function verifyPassword(password, storedHash) {
+  const normalized = String(storedHash || "");
+  if (!normalized) {
+    return false;
+  }
+  if (!normalized.startsWith("s1$")) {
+    return timingSafeEqualHex(normalized, createHash("sha256").update(String(password || "")).digest("hex"));
+  }
+  const [, salt, expected] = normalized.split("$");
+  if (!salt || !expected) {
+    return false;
+  }
+  const actual = scryptSync(String(password || ""), salt, 64).toString("hex");
+  return timingSafeEqualHex(expected, actual);
+}
+
+function needsPasswordRehash(storedHash) {
+  return !String(storedHash || "").startsWith("s1$");
+}
+
+function timingSafeEqualHex(left, right) {
+  const leftBuf = Buffer.from(String(left || ""), "utf8");
+  const rightBuf = Buffer.from(String(right || ""), "utf8");
+  if (leftBuf.length !== rightBuf.length) {
+    return false;
+  }
+  return timingSafeEqual(leftBuf, rightBuf);
 }
 
 function buildActorId() {
