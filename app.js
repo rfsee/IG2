@@ -1551,7 +1551,7 @@ function initAuthUi() {
 
 function loadAuthSession() {
   try {
-    const raw = localStorage.getItem(BRAND_STRATEGY_AUTH_SESSION_KEY);
+    const raw = sessionStorage.getItem(BRAND_STRATEGY_AUTH_SESSION_KEY) || localStorage.getItem(BRAND_STRATEGY_AUTH_SESSION_KEY);
     if (!raw) {
       return null;
     }
@@ -1585,16 +1585,20 @@ function persistAuthSession(payload) {
     activeRole: String(activeItem?.role || "").trim(),
     activeTenantName: String(activeItem?.tenantName || "").trim()
   };
-  localStorage.setItem(BRAND_STRATEGY_AUTH_SESSION_KEY, JSON.stringify(session));
-  localStorage.setItem(
+  sessionStorage.setItem(BRAND_STRATEGY_AUTH_SESSION_KEY, JSON.stringify(session));
+  localStorage.removeItem(BRAND_STRATEGY_AUTH_SESSION_KEY);
+  sessionStorage.setItem(
     TENANT_SELECTION_STORAGE_KEY,
     JSON.stringify({ activeTenantId: session.activeTenantId, items: session.items })
   );
+  localStorage.removeItem(TENANT_SELECTION_STORAGE_KEY);
   updateAuthUi(session);
   return session;
 }
 
 function clearAuthSession() {
+  sessionStorage.removeItem(BRAND_STRATEGY_AUTH_SESSION_KEY);
+  sessionStorage.removeItem(TENANT_SELECTION_STORAGE_KEY);
   localStorage.removeItem(BRAND_STRATEGY_AUTH_SESSION_KEY);
   localStorage.removeItem(TENANT_SELECTION_STORAGE_KEY);
   updateAuthUi(null);
