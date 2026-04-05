@@ -290,6 +290,15 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     }
 
+    if (req.method === "GET" && url.pathname === "/api/auth/session") {
+      const actorId = await services.authProvider.resolveActor(req);
+      const items = await services.repository.listVisibleTenants(actorId);
+      return sendJson(res, 200, {
+        actorId,
+        items: Array.isArray(items) ? items : []
+      });
+    }
+
     if (req.method === "GET" && url.pathname === "/api/tenants") {
       const actorId = await services.authProvider.resolveActor(req);
       const visible = await services.repository.listVisibleTenants(actorId);

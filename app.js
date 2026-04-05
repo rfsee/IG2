@@ -216,6 +216,7 @@ const refs = {
 loadProductCoverCache();
 bindEvents();
 initAuthUi();
+rehydrateAuthSessionFromBackend();
 if (loadResult.needsPersist) {
   persistStateSnapshot(state);
 }
@@ -1552,6 +1553,26 @@ function initAuthUi() {
   updateAuthUi(loadAuthSession());
 }
 
+async function rehydrateAuthSessionFromBackend() {
+  const session = loadAuthSession();
+  if (!session?.activeTenantId) {
+    return;
+  }
+  try {
+    const payload = await requestAuthSession();
+    persistAuthSession({
+      actorId: payload.actorId,
+      items: Array.isArray(payload.items) ? payload.items : [],
+      activeTenantId: session.activeTenantId
+    });
+  } catch (_error) {
+    clearAuthSession();
+    if (refs.brandStrategySummary) {
+      refs.brandStrategySummary.textContent = "登入已過期，請重新登入。";
+    }
+  }
+}
+
 function loadAuthSession() {
   try {
     const raw = sessionStorage.getItem(BRAND_STRATEGY_AUTH_SESSION_KEY) || localStorage.getItem(BRAND_STRATEGY_AUTH_SESSION_KEY);
@@ -1718,6 +1739,19 @@ async function requestAuthLogout(token) {
       : undefined,
     credentials: "include"
   });
+}
+
+async function requestAuthSession() {
+  const apiBase = resolveBrandStrategyApiBase();
+  const response = await fetch(`${apiBase}/api/auth/session`, {
+    method: "GET",
+    credentials: "include"
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(String(payload.error || `auth_session_failed_${response.status}`));
+  }
+  return payload;
 }
 
 function resolveBrandStrategyAuthContext() {
