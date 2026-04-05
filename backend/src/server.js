@@ -14,6 +14,7 @@ const PORT = Number(process.env.PORT || 8793);
 const STARTED_AT = new Date();
 const APP_VERSION = String(process.env.APP_VERSION || process.env.npm_package_version || "0.1.0");
 const AUTH_PASSWORD_MIN_LENGTH = Math.max(Number(process.env.AUTH_PASSWORD_MIN_LENGTH || 10), 8);
+const AUTH_SESSION_COOKIE_NAME = "ig2_session";
 const AUTH_REGISTER_ENABLED = parseEnvBoolean(process.env.AUTH_REGISTER_ENABLED, true);
 const AUTH_REGISTER_EMAIL_ALLOWLIST_EXACT = buildExactEmailAllowlist(process.env.AUTH_REGISTER_EMAIL_ALLOWLIST);
 const AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX = String(process.env.AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX || "").trim();
@@ -211,7 +212,9 @@ const server = createServer(async (req, res) => {
           req.socket?.remoteAddress || ""
         );
       }
-      return sendJson(res, 201, await buildAuthResponse(services, registered.actorId, items));
+      const authPayload = await buildAuthResponse(services, registered.actorId, items);
+      applyAuthSessionCookie(res, authPayload.token);
+      return sendJson(res, 201, authPayload);
     }
 
     if (req.method === "POST" && url.pathname === "/api/auth/login") {
@@ -248,7 +251,9 @@ const server = createServer(async (req, res) => {
           req.socket?.remoteAddress || ""
         );
       }
-      return sendJson(res, 200, await buildAuthResponse(services, loggedIn.actorId, items));
+      const authPayload = await buildAuthResponse(services, loggedIn.actorId, items);
+      applyAuthSessionCookie(res, authPayload.token);
+      return sendJson(res, 200, authPayload);
     }
 
     if (req.method === "POST" && url.pathname === "/api/auth/logout") {
@@ -280,6 +285,7 @@ const server = createServer(async (req, res) => {
             req.socket?.remoteAddress || ""
           );
         }
+        clearAuthSessionCookie(res);
       }
       return sendJson(res, 200, { ok: true });
     }
@@ -1640,6 +1646,7 @@ function applyCorsHeaders(req, res) {
     res.setHeader("access-control-allow-origin", origin);
     res.setHeader("vary", "Origin");
   }
+  res.setHeader("access-control-allow-credentials", "true");
   res.setHeader("access-control-allow-methods", "GET,POST,PUT,DELETE,OPTIONS");
   res.setHeader(
     "access-control-allow-headers",
@@ -1659,6 +1666,21 @@ function applySecurityHeaders(res) {
   res.setHeader("x-content-type-options", "nosniff");
   res.setHeader("referrer-policy", "strict-origin-when-cross-origin");
   res.setHeader("x-frame-options", "DENY");
+}
+
+function applyAuthSessionCookie(res, token) {
+  const maxAgeSeconds = 3 * 24 * 60 * 60;
+  res.setHeader(
+    "set-cookie",
+    `${AUTH_SESSION_COOKIE_NAME}=${encodeURIComponent(String(token || ""))}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; Secure; SameSite=None`
+  );
+}
+
+function clearAuthSessionCookie(res) {
+  res.setHeader(
+    "set-cookie",
+    `${AUTH_SESSION_COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=None`
+  );
 }
 
 async function consumeAuthThrottle(repository, identifier) {

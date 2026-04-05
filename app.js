@@ -1501,20 +1501,23 @@ function hydrateBrandStrategyForm(intake) {
 async function requestBrandStrategyApi(method, path, body) {
   const apiBase = resolveBrandStrategyApiBase();
   const auth = resolveBrandStrategyAuthContext();
-  if (!auth.token || !auth.tenantId) {
+  if (!auth.tenantId) {
     throw new Error("auth_required");
   }
   const headers = {
     "content-type": "application/json",
-    authorization: `Bearer ${auth.token}`,
     "x-tenant-id": auth.tenantId
   };
+  if (auth.token) {
+    headers.authorization = `Bearer ${auth.token}`;
+  }
   let response;
   try {
     response = await fetch(`${apiBase}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body)
+      body: body === undefined ? undefined : JSON.stringify(body),
+      credentials: "include"
     });
   } catch (_error) {
     throw new Error(`brand_strategy_network_error (${apiBase})`);
@@ -1562,7 +1565,6 @@ function loadAuthSession() {
     return {
       connected: true,
       actorId: String(parsed.actorId || "").trim(),
-      token: String(parsed.token || "").trim(),
       items: Array.isArray(parsed.items) ? parsed.items : [],
       activeTenantId: String(parsed.activeTenantId || "").trim(),
       activeRole: String(parsed.activeRole || "").trim(),
@@ -1579,7 +1581,6 @@ function persistAuthSession(payload) {
   const session = {
     connected: true,
     actorId: String(payload?.actorId || "").trim(),
-    token: String(payload?.token || "").trim(),
     items,
     activeTenantId: String(activeItem?.tenantId || payload?.activeTenantId || "").trim(),
     activeRole: String(activeItem?.role || "").trim(),
@@ -1605,7 +1606,7 @@ function clearAuthSession() {
 }
 
 function updateAuthUi(session) {
-  const connected = Boolean(session?.connected && session?.token);
+  const connected = Boolean(session?.connected && session?.activeTenantId);
   if (refs.loginStatus) {
     refs.loginStatus.textContent = connected ? "後端模式：已登入雲端" : "後端模式：未登入";
   }
@@ -1627,7 +1628,7 @@ function updateAuthUi(session) {
 }
 
 function hasConnectedAuthSession() {
-  return Boolean(loadAuthSession()?.token);
+  return Boolean(loadAuthSession()?.activeTenantId);
 }
 
 async function onAuthRegister() {
@@ -1693,7 +1694,8 @@ async function requestAuthApi(path, body) {
     response = await fetch(`${apiBase}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      credentials: "include"
     });
   } catch (_error) {
     throw new Error(`auth_network_error (${apiBase})`);
@@ -1709,16 +1711,19 @@ async function requestAuthLogout(token) {
   const apiBase = resolveBrandStrategyApiBase();
   await fetch(`${apiBase}/api/auth/logout`, {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${String(token || "").trim()}`
-    }
+    headers: token
+      ? {
+          authorization: `Bearer ${String(token || "").trim()}`
+        }
+      : undefined,
+    credentials: "include"
   });
 }
 
 function resolveBrandStrategyAuthContext() {
   const session = loadAuthSession();
   return {
-    token: String(session?.token || "").trim(),
+    token: "",
     tenantId: String(session?.activeTenantId || "").trim()
   };
 }

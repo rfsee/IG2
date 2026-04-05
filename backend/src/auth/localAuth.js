@@ -16,7 +16,7 @@ export function createLocalAuthProvider(repository) {
   return {
     kind: "local",
     async resolveActor(req) {
-      const token = extractBearer(req.headers.authorization || "");
+      const token = extractSessionToken(req);
       const session = await repository.resolveAuthSession(hashToken(token));
       if (!session || !session.actorId) {
         throw createHttpError("invalid_token", 401);
@@ -39,12 +39,31 @@ export function createLocalAuthProvider(repository) {
   };
 }
 
-function extractBearer(rawAuthorization) {
-  const token = String(rawAuthorization || "").replace(/^Bearer\s+/i, "").trim();
+function extractSessionToken(req) {
+  const cookieToken = readCookie(req?.headers?.cookie, "ig2_session");
+  if (cookieToken) {
+    return cookieToken;
+  }
+  const token = String(req?.headers?.authorization || "").replace(/^Bearer\s+/i, "").trim();
   if (!token) {
     throw createHttpError("missing_bearer_token", 401);
   }
   return token;
+}
+
+function readCookie(rawCookieHeader, key) {
+  const raw = String(rawCookieHeader || "");
+  if (!raw) {
+    return "";
+  }
+  const pairs = raw.split(";").map((item) => item.trim()).filter(Boolean);
+  for (const pair of pairs) {
+    const [cookieKey, ...rest] = pair.split("=");
+    if (String(cookieKey || "").trim() === key) {
+      return decodeURIComponent(rest.join("=").trim());
+    }
+  }
+  return "";
 }
 
 function hashToken(token) {
