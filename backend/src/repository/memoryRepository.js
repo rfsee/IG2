@@ -143,6 +143,7 @@ const sharedReportLinks = [];
 const auditEvents = [];
 const credentialStore = new Map();
 const authSessionStore = new Map();
+const authThrottleStore = new Map();
 const onboardingStateStore = new Map();
 const alertRuleStore = new Map();
 const commentStore = new Map();
@@ -742,6 +743,21 @@ export function createMemoryRepository() {
     },
     async deleteAuthSession(tokenHash) {
       authSessionStore.delete(String(tokenHash || ""));
+    },
+    async consumeAuthThrottle(identifier, limit, windowMs) {
+      const key = String(identifier || "unknown");
+      const now = Date.now();
+      const existing = authThrottleStore.get(key);
+      if (!existing || now >= existing.resetAt) {
+        authThrottleStore.set(key, { count: 1, resetAt: now + Number(windowMs || 60_000) });
+        return;
+      }
+      existing.count += 1;
+      if (existing.count > Number(limit || 10)) {
+        const err = createHttpError("rate_limited", 429);
+        err.retryAfterMs = Math.max(0, existing.resetAt - now);
+        throw err;
+      }
     },
     async appendAuditEvent(event) {
       auditEvents.unshift({ ...event, id: randomUUID(), createdAt: new Date().toISOString() });

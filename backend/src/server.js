@@ -5,7 +5,7 @@ import { URL, fileURLToPath } from "node:url";
 import { sendJson, readJsonBody } from "./json.js";
 import { requirePermission } from "./rbac.js";
 import { resolveTenantContext } from "./tenantContext.js";
-import { enforceAuthRateLimit, enforceRateLimit } from "./rateLimit.js";
+import { AUTH_WINDOW_MS, enforceRateLimit } from "./rateLimit.js";
 import { writeAudit } from "./audit.js";
 import { bootstrapCore } from "./bootstrap.js";
 import { createHttpError, normalizeError } from "./errors.js";
@@ -49,16 +49,13 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, {
         ok: true,
         service: "ig-growth-os-core-api",
-        repository: services.repository.kind,
-        authProvider: services.authProvider.kind,
-        version: APP_VERSION,
-        startedAt: STARTED_AT.toISOString(),
-        uptimeMs: Date.now() - STARTED_AT.getTime(),
-        data: services.health
+        status: "healthy",
+        timestamp: new Date().toISOString()
       });
     }
 
     if (req.method === "GET" && url.pathname === "/api/product-preview") {
+      await consumeAuthThrottle(services.repository, `public-preview:${String(req.socket?.remoteAddress || "unknown")}`);
       const raw = String(url.searchParams.get("url") || "").trim();
       if (!raw) {
         throw createHttpError("product_preview_url_required", 400);
@@ -167,7 +164,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/auth/register") {
       const body = await readJsonBody(req);
       const email = String(body.email || "").trim().toLowerCase();
-      enforceAuthRateLimit(`${req.socket?.remoteAddress || "unknown"}:register:${email || "unknown"}`);
+      await consumeAuthThrottle(services.repository, `${req.socket?.remoteAddress || "unknown"}:register:${email || "unknown"}`);
       if (!AUTH_REGISTER_ENABLED) {
         throw createHttpError("auth_register_disabled", 403);
       }
@@ -189,7 +186,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/auth/login") {
       const body = await readJsonBody(req);
       const email = String(body.email || "").trim().toLowerCase();
-      enforceAuthRateLimit(`${req.socket?.remoteAddress || "unknown"}:login:${email || "unknown"}`);
+      await consumeAuthThrottle(services.repository, `${req.socket?.remoteAddress || "unknown"}:login:${email || "unknown"}`);
       const loggedIn = await services.repository.loginUser({
         email,
         password: body.password
@@ -1579,6 +1576,12 @@ function buildOriginAllowlist(rawValue) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+async function consumeAuthThrottle(repository, identifier) {
+  if (repository && typeof repository.consumeAuthThrottle === "function") {
+    await repository.consumeAuthThrottle(identifier, 8, AUTH_WINDOW_MS);
+  }
 }
 
 function parseEnvBoolean(value, fallback = false) {

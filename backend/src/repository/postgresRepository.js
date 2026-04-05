@@ -1464,6 +1464,36 @@ export function createPostgresRepository() {
         [String(tokenHash || "")]
       );
     },
+    async consumeAuthThrottle(identifier, limit, windowMs) {
+      const key = String(identifier || "unknown");
+      const normalizedLimit = Math.max(Number(limit || 10), 1);
+      const windowSeconds = Math.max(Math.ceil(Number(windowMs || 60_000) / 1000), 1);
+      const { rows } = await pool.query(
+        `INSERT INTO bridge.auth_rate_limits (bucket_key, count, window_started_at, updated_at)
+         VALUES ($1, 1, NOW(), NOW())
+         ON CONFLICT (bucket_key) DO UPDATE SET
+           count = CASE
+             WHEN bridge.auth_rate_limits.window_started_at <= NOW() - make_interval(secs => $3::int)
+               THEN 1
+             ELSE bridge.auth_rate_limits.count + 1
+           END,
+           window_started_at = CASE
+             WHEN bridge.auth_rate_limits.window_started_at <= NOW() - make_interval(secs => $3::int)
+               THEN NOW()
+             ELSE bridge.auth_rate_limits.window_started_at
+           END,
+           updated_at = NOW()
+         RETURNING count,
+                   GREATEST(0, $3 - EXTRACT(EPOCH FROM (NOW() - window_started_at))) AS "retryAfterSeconds"`,
+        [key, normalizedLimit, windowSeconds]
+      );
+      const hit = rows[0];
+      if (Number(hit?.count || 0) > normalizedLimit) {
+        const err = createHttpError("rate_limited", 429);
+        err.retryAfterMs = Math.max(0, Number(hit?.retryAfterSeconds || 0) * 1000);
+        throw err;
+      }
+    },
     async appendAuditEvent(event) {
       await pool.query(
         `INSERT INTO bridge.audit_events
