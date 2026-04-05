@@ -198,6 +198,18 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, await buildAuthResponse(services, loggedIn.actorId, items));
     }
 
+    if (req.method === "POST" && url.pathname === "/api/auth/logout") {
+      const authHeader = String(req.headers.authorization || "").trim();
+      if (!authHeader) {
+        throw createHttpError("missing_bearer_token", 401);
+      }
+      if (typeof services?.authProvider?.revokeToken === "function") {
+        const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+        await services.authProvider.revokeToken(token);
+      }
+      return sendJson(res, 200, { ok: true });
+    }
+
     if (req.method === "GET" && url.pathname === "/api/tenants") {
       const actorId = await services.authProvider.resolveActor(req);
       const visible = await services.repository.listVisibleTenants(actorId);

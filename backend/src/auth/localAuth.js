@@ -4,7 +4,12 @@ import { createHttpError } from "../errors.js";
 const SESSION_TTL_DAYS = Number(process.env.AUTH_SESSION_TTL_DAYS || 14);
 
 export function createLocalAuthProvider(repository) {
-  if (!repository || typeof repository.createAuthSession !== "function" || typeof repository.resolveAuthSession !== "function") {
+  if (
+    !repository ||
+    typeof repository.createAuthSession !== "function" ||
+    typeof repository.resolveAuthSession !== "function" ||
+    typeof repository.deleteAuthSession !== "function"
+  ) {
     throw createHttpError("local_auth_repository_support_required", 500);
   }
 
@@ -27,6 +32,9 @@ export function createLocalAuthProvider(repository) {
         expiresAt
       });
       return rawToken;
+    },
+    async revokeToken(token) {
+      await repository.deleteAuthSession(hashToken(token));
     }
   };
 }
