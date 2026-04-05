@@ -1328,11 +1328,12 @@ export function createPostgresRepository() {
     async registerUser(input = {}) {
       const email = normalizeEmail(input.email);
       const password = String(input.password || "");
+      const passwordMinLength = Math.max(Number(input.passwordMinLength || 10), 8);
       const storeName = String(input.storeName || "").trim();
       if (!email) {
         throw createHttpError("email_required", 400);
       }
-      if (password.length < 6) {
+      if (password.length < passwordMinLength) {
         throw createHttpError("password_too_short", 400);
       }
       if (!storeName) {
@@ -1401,7 +1402,8 @@ export function createPostgresRepository() {
     async loginUser(input = {}) {
       const email = normalizeEmail(input.email);
       const password = String(input.password || "");
-      if (!email || !password) {
+      const passwordMinLength = Math.max(Number(input.passwordMinLength || 10), 8);
+      if (!email || !password || password.length < Math.min(passwordMinLength, 8)) {
         throw createHttpError("invalid_credentials", 401);
       }
 

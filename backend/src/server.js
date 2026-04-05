@@ -13,6 +13,7 @@ import { createHttpError, normalizeError } from "./errors.js";
 const PORT = Number(process.env.PORT || 8793);
 const STARTED_AT = new Date();
 const APP_VERSION = String(process.env.APP_VERSION || process.env.npm_package_version || "0.1.0");
+const AUTH_PASSWORD_MIN_LENGTH = Math.max(Number(process.env.AUTH_PASSWORD_MIN_LENGTH || 10), 8);
 const AUTH_REGISTER_ENABLED = parseEnvBoolean(process.env.AUTH_REGISTER_ENABLED, true);
 const AUTH_REGISTER_EMAIL_ALLOWLIST_EXACT = buildExactEmailAllowlist(process.env.AUTH_REGISTER_EMAIL_ALLOWLIST);
 const AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX = String(process.env.AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX || "").trim();
@@ -184,7 +185,8 @@ const server = createServer(async (req, res) => {
       const registered = await services.repository.registerUser({
         email,
         password: body.password,
-        storeName: body.storeName
+        storeName: body.storeName,
+        passwordMinLength: AUTH_PASSWORD_MIN_LENGTH
       });
       const items = await services.repository.listVisibleTenants(registered.actorId);
       return sendJson(res, 201, await buildAuthResponse(services, registered.actorId, items));
@@ -198,7 +200,8 @@ const server = createServer(async (req, res) => {
       await consumeAuthThrottle(services.repository, `login-email:${email || "unknown"}`);
       const loggedIn = await services.repository.loginUser({
         email,
-        password: body.password
+        password: body.password,
+        passwordMinLength: AUTH_PASSWORD_MIN_LENGTH
       });
       const items = await services.repository.listVisibleTenants(loggedIn.actorId);
       return sendJson(res, 200, await buildAuthResponse(services, loggedIn.actorId, items));
