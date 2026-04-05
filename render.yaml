@@ -13,10 +13,14 @@
       - key: DATA_PROVIDER
         value: postgres
       - key: AUTH_PROVIDER
-        value: dev
+        value: local
       - key: AUTH_REGISTER_ENABLED
         value: "true"
+      - key: AUTH_REGISTER_EMAIL_ALLOWLIST
+        sync: false
       - key: AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
         sync: false
       - key: DATABASE_URL
         sync: false
