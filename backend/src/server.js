@@ -169,7 +169,9 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/auth/register") {
       const body = await readJsonBody(req);
       const email = String(body.email || "").trim().toLowerCase();
-      await consumeAuthThrottle(services.repository, `${req.socket?.remoteAddress || "unknown"}:register:${email || "unknown"}`);
+      const remoteAddress = String(req.socket?.remoteAddress || "unknown");
+      await consumeAuthThrottle(services.repository, `${remoteAddress}:register:${email || "unknown"}`);
+      await consumeAuthThrottle(services.repository, `register-email:${email || "unknown"}`);
       if (!AUTH_REGISTER_ENABLED) {
         throw createHttpError("auth_register_disabled", 403);
       }
@@ -191,7 +193,9 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/auth/login") {
       const body = await readJsonBody(req);
       const email = String(body.email || "").trim().toLowerCase();
-      await consumeAuthThrottle(services.repository, `${req.socket?.remoteAddress || "unknown"}:login:${email || "unknown"}`);
+      const remoteAddress = String(req.socket?.remoteAddress || "unknown");
+      await consumeAuthThrottle(services.repository, `${remoteAddress}:login:${email || "unknown"}`);
+      await consumeAuthThrottle(services.repository, `login-email:${email || "unknown"}`);
       const loggedIn = await services.repository.loginUser({
         email,
         password: body.password
