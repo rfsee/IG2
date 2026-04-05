@@ -23,9 +23,14 @@ const productPreviewCache = new Map();
 let productPreviewCacheLoaded = false;
 const services = await bootstrapCore();
 
+if (services.authProvider.kind === "local" && AUTH_REGISTER_ENABLED && CORS_ALLOWED_ORIGINS.length === 0) {
+  throw createHttpError("cors_allowed_origins_required_for_public_local_auth", 500);
+}
+
 const server = createServer(async (req, res) => {
   try {
     applyCorsHeaders(req, res);
+    applySecurityHeaders(res);
 
     if (req.method === "OPTIONS") {
       res.writeHead(204);
@@ -1578,6 +1583,12 @@ function buildOriginAllowlist(rawValue) {
     .filter(Boolean);
 }
 
+function applySecurityHeaders(res) {
+  res.setHeader("x-content-type-options", "nosniff");
+  res.setHeader("referrer-policy", "strict-origin-when-cross-origin");
+  res.setHeader("x-frame-options", "DENY");
+}
+
 async function consumeAuthThrottle(repository, identifier) {
   if (repository && typeof repository.consumeAuthThrottle === "function") {
     await repository.consumeAuthThrottle(identifier, 8, AUTH_WINDOW_MS);
@@ -1623,7 +1634,10 @@ function normalizeProductPreviewUrl(input) {
   try {
     const parsed = new URL(String(input || "").trim());
     const host = String(parsed.hostname || "").toLowerCase();
-    if (!host.endsWith("shopee.tw")) {
+    if (host !== "shopee.tw" && !host.endsWith(".shopee.tw")) {
+      return "";
+    }
+    if (parsed.protocol !== "https:") {
       return "";
     }
     parsed.hash = "";
@@ -1643,7 +1657,7 @@ async function fetchFirstProductImage(url) {
   try {
     const response = await fetch(url, {
       method: "GET",
-      redirect: "follow",
+      redirect: "manual",
       signal: controller.signal,
       headers: {
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36"
