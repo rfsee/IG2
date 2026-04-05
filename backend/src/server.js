@@ -5,7 +5,7 @@ import { URL, fileURLToPath } from "node:url";
 import { sendJson, readJsonBody } from "./json.js";
 import { requirePermission } from "./rbac.js";
 import { resolveTenantContext } from "./tenantContext.js";
-import { enforceRateLimit } from "./rateLimit.js";
+import { enforceAuthRateLimit, enforceRateLimit } from "./rateLimit.js";
 import { writeAudit } from "./audit.js";
 import { bootstrapCore } from "./bootstrap.js";
 import { createHttpError, normalizeError } from "./errors.js";
@@ -14,8 +14,10 @@ const PORT = Number(process.env.PORT || 8793);
 const STARTED_AT = new Date();
 const APP_VERSION = String(process.env.APP_VERSION || process.env.npm_package_version || "0.1.0");
 const AUTH_REGISTER_ENABLED = parseEnvBoolean(process.env.AUTH_REGISTER_ENABLED, true);
+const AUTH_REGISTER_EMAIL_ALLOWLIST_EXACT = buildExactEmailAllowlist(process.env.AUTH_REGISTER_EMAIL_ALLOWLIST);
 const AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX = String(process.env.AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX || "").trim();
 const AUTH_REGISTER_EMAIL_ALLOWLIST = buildEmailAllowlistMatcher(AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX);
+const CORS_ALLOWED_ORIGINS = buildOriginAllowlist(process.env.CORS_ALLOWED_ORIGINS);
 const PRODUCT_PREVIEW_CACHE_FILE = new URL("../data/product_preview_cache.json", import.meta.url);
 const productPreviewCache = new Map();
 let productPreviewCacheLoaded = false;
@@ -165,8 +167,12 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/auth/register") {
       const body = await readJsonBody(req);
       const email = String(body.email || "").trim().toLowerCase();
+      enforceAuthRateLimit(`${req.socket?.remoteAddress || "unknown"}:register:${email || "unknown"}`);
       if (!AUTH_REGISTER_ENABLED) {
         throw createHttpError("auth_register_disabled", 403);
+      }
+      if (AUTH_REGISTER_EMAIL_ALLOWLIST_EXACT.size > 0 && !AUTH_REGISTER_EMAIL_ALLOWLIST_EXACT.has(email)) {
+        throw createHttpError("auth_register_email_not_allowed", 403);
       }
       if (AUTH_REGISTER_EMAIL_ALLOWLIST && !AUTH_REGISTER_EMAIL_ALLOWLIST.test(email)) {
         throw createHttpError("auth_register_email_not_allowed", 403);
@@ -177,17 +183,19 @@ const server = createServer(async (req, res) => {
         storeName: body.storeName
       });
       const items = await services.repository.listVisibleTenants(registered.actorId);
-      return sendJson(res, 201, buildAuthResponse(registered.actorId, items));
+      return sendJson(res, 201, await buildAuthResponse(services, registered.actorId, items));
     }
 
     if (req.method === "POST" && url.pathname === "/api/auth/login") {
       const body = await readJsonBody(req);
+      const email = String(body.email || "").trim().toLowerCase();
+      enforceAuthRateLimit(`${req.socket?.remoteAddress || "unknown"}:login:${email || "unknown"}`);
       const loggedIn = await services.repository.loginUser({
-        email: body.email,
+        email,
         password: body.password
       });
       const items = await services.repository.listVisibleTenants(loggedIn.actorId);
-      return sendJson(res, 200, buildAuthResponse(loggedIn.actorId, items));
+      return sendJson(res, 200, await buildAuthResponse(services, loggedIn.actorId, items));
     }
 
     if (req.method === "GET" && url.pathname === "/api/tenants") {
@@ -1526,24 +1534,39 @@ function normalizeBrandStrategyKeywords(raw) {
   return normalized;
 }
 
-function buildAuthResponse(actorId, items) {
+async function buildAuthResponse(services, actorId, items) {
+  const token = typeof services?.authProvider?.issueToken === "function"
+    ? await services.authProvider.issueToken(actorId)
+    : `dev_user_${actorId}`;
   return {
     actorId,
-    token: `dev_user_${actorId}`,
+    token,
     items: Array.isArray(items) ? items : []
   };
 }
 
 function applyCorsHeaders(req, res) {
-  const origin = String(req.headers.origin || "*");
-  res.setHeader("access-control-allow-origin", origin);
-  res.setHeader("vary", "Origin");
+  const origin = String(req.headers.origin || "").trim();
+  if (!CORS_ALLOWED_ORIGINS.length) {
+    res.setHeader("access-control-allow-origin", origin || "*");
+    res.setHeader("vary", "Origin");
+  } else if (origin && CORS_ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("access-control-allow-origin", origin);
+    res.setHeader("vary", "Origin");
+  }
   res.setHeader("access-control-allow-methods", "GET,POST,PUT,DELETE,OPTIONS");
   res.setHeader(
     "access-control-allow-headers",
     "content-type,authorization,x-tenant-id,x-request-id,x-trace-id,x-parent-span-id"
   );
   res.setHeader("access-control-max-age", "86400");
+}
+
+function buildOriginAllowlist(rawValue) {
+  return String(rawValue || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function parseEnvBoolean(value, fallback = false) {
@@ -1570,6 +1593,15 @@ function buildEmailAllowlistMatcher(pattern) {
   } catch (_error) {
     throw createHttpError("auth_register_email_allowlist_regex_invalid", 500);
   }
+}
+
+function buildExactEmailAllowlist(rawValue) {
+  return new Set(
+    String(rawValue || "")
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean)
+  );
 }
 
 function normalizeProductPreviewUrl(input) {

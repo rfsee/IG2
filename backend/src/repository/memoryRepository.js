@@ -142,6 +142,7 @@ const sharedReportLinks = [];
 
 const auditEvents = [];
 const credentialStore = new Map();
+const authSessionStore = new Map();
 const onboardingStateStore = new Map();
 const alertRuleStore = new Map();
 const commentStore = new Map();
@@ -714,6 +715,24 @@ export function createMemoryRepository() {
       return {
         actorId: hit.actorId
       };
+    },
+    async createAuthSession(input = {}) {
+      authSessionStore.set(String(input.tokenHash || ""), {
+        actorId: String(input.actorId || "").trim(),
+        expiresAt: String(input.expiresAt || "")
+      });
+    },
+    async resolveAuthSession(tokenHash) {
+      const hit = authSessionStore.get(String(tokenHash || ""));
+      if (!hit) {
+        return null;
+      }
+      const expiresAtMs = Date.parse(String(hit.expiresAt || ""));
+      if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+        authSessionStore.delete(String(tokenHash || ""));
+        return null;
+      }
+      return { actorId: String(hit.actorId || "").trim(), expiresAt: hit.expiresAt };
     },
     async appendAuditEvent(event) {
       auditEvents.unshift({ ...event, id: randomUUID(), createdAt: new Date().toISOString() });

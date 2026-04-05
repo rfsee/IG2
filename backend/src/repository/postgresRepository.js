@@ -1424,6 +1424,28 @@ export function createPostgresRepository() {
         actorId: String(hit.actorId || "").trim()
       };
     },
+    async createAuthSession(input = {}) {
+      await pool.query(
+        `INSERT INTO bridge.auth_sessions (token_hash, actor_id, expires_at, last_seen_at)
+         VALUES ($1, $2, $3::timestamptz, NOW())
+         ON CONFLICT (token_hash) DO UPDATE SET
+           actor_id = EXCLUDED.actor_id,
+           expires_at = EXCLUDED.expires_at,
+           last_seen_at = NOW()`,
+        [String(input.tokenHash || ""), String(input.actorId || "").trim(), String(input.expiresAt || "")]
+      );
+    },
+    async resolveAuthSession(tokenHash) {
+      const { rows } = await pool.query(
+        `UPDATE bridge.auth_sessions
+         SET last_seen_at = NOW()
+         WHERE token_hash = $1
+           AND expires_at > NOW()
+         RETURNING actor_id AS "actorId", expires_at AS "expiresAt"`,
+        [String(tokenHash || "")]
+      );
+      return rows[0] || null;
+    },
     async appendAuditEvent(event) {
       await pool.query(
         `INSERT INTO bridge.audit_events
