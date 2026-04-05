@@ -1333,11 +1333,17 @@ export function createPostgresRepository() {
       if (!email) {
         throw createHttpError("email_required", 400);
       }
+      if (!isValidEmail(email)) {
+        throw createHttpError("email_invalid", 400);
+      }
       if (password.length < passwordMinLength) {
         throw createHttpError("password_too_short", 400);
       }
       if (!storeName) {
         throw createHttpError("store_name_required", 400);
+      }
+      if (storeName.length > 80) {
+        throw createHttpError("store_name_too_long", 400);
       }
 
       const client = await pool.connect();
@@ -1591,6 +1597,10 @@ function normalizeAuditQuery(query) {
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ""));
 }
 
 function hashPassword(password) {
