@@ -50,9 +50,11 @@ Required env vars for persistent internal testing:
 
 ```env
 DATA_PROVIDER=postgres
-AUTH_PROVIDER=dev
+AUTH_PROVIDER=local
 AUTH_REGISTER_ENABLED=true
+AUTH_REGISTER_EMAIL_ALLOWLIST=tester1@example.com,tester2@example.com
 AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX=@yourcompany\\.com$
+CORS_ALLOWED_ORIGINS=https://rfsee.github.io
 DATABASE_URL=postgres://...
 ```
 
@@ -61,6 +63,34 @@ Recommended first rollout:
 2. Deploy frontend static site
 3. Point `config.js` to backend public URL
 4. Verify `/health`, login, posts, products, brand strategy
+
+### Registration modes
+
+- **Closed / internal pilot**
+
+```env
+AUTH_REGISTER_ENABLED=false
+```
+
+- **Small external whitelist**
+
+```env
+AUTH_REGISTER_ENABLED=true
+AUTH_REGISTER_EMAIL_ALLOWLIST=tester1@example.com,tester2@example.com
+AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX=
+```
+
+- **Broader public registration**
+
+```env
+AUTH_REGISTER_ENABLED=true
+AUTH_REGISTER_EMAIL_ALLOWLIST=
+AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX=
+AUTH_PROVIDER=local
+CORS_ALLOWED_ORIGINS=https://rfsee.github.io
+```
+
+The backend now issues opaque `ig2_...` session tokens in `AUTH_PROVIDER=local` mode instead of predictable dev tokens.
 
 Render service settings (from this repo):
 - Root Directory: `backend`
