@@ -33,6 +33,9 @@ export function createLocalAuthProvider(repository) {
       });
       return rawToken;
     },
+    extractToken(req) {
+      return extractSessionToken(req);
+    },
     async revokeToken(token) {
       await repository.deleteAuthSession(hashToken(token));
     }

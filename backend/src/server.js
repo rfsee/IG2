@@ -257,13 +257,11 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && url.pathname === "/api/auth/logout") {
-      const authHeader = String(req.headers.authorization || "").trim();
-      if (!authHeader) {
-        throw createHttpError("missing_bearer_token", 401);
-      }
       if (typeof services?.authProvider?.revokeToken === "function") {
-        const token = authHeader.replace(/^Bearer\s+/i, "").trim();
         const actorId = await services.authProvider.resolveActor(req);
+        const token = typeof services?.authProvider?.extractToken === "function"
+          ? services.authProvider.extractToken(req)
+          : String(req.headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
         const items = await services.repository.listVisibleTenants(actorId);
         const primaryTenant = items[0];
         await services.authProvider.revokeToken(token);
