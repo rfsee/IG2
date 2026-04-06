@@ -38,10 +38,13 @@ window.__IG2_RUNTIME_CONFIG__ = {
 ```
 
 Frontend backend API base resolution order:
-1. `window.__IG2_RUNTIME_CONFIG__.BACKEND_API_BASE`
-2. `http://127.0.0.1:8793`
+1. If `ALLOW_PUBLIC_API_BASE_OVERRIDE=true`: query param `?backend_api_base=...`
+2. If `ALLOW_PUBLIC_API_BASE_OVERRIDE=true`: localStorage key `ig_ops_backend_api_base_v1`
+3. `window.__IG2_RUNTIME_CONFIG__.BACKEND_API_BASE`
+4. `http://127.0.0.1:8793`
 
 For public deployments, `ALLOW_PUBLIC_API_BASE_OVERRIDE` should stay `false` so the frontend does not send auth tokens to arbitrary backend URLs.
+For local verification, either temporarily enable `ALLOW_PUBLIC_API_BASE_OVERRIDE=true` and pass `?backend_api_base=http://127.0.0.1:8793`, or edit `config.js` to point at your local backend.
 
 ## Backend deployment
 

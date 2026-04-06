@@ -125,11 +125,13 @@ Behavior:
 ## Frontend backend base URL override
 
 Frontend `app.js` reads backend base URL in this order:
-- Query param: `?backend_api_base=http://127.0.0.1:8793`
-- Local storage key: `ig_ops_backend_api_base_v1`
+- If `window.__IG2_RUNTIME_CONFIG__.ALLOW_PUBLIC_API_BASE_OVERRIDE === true`:
+  - Query param: `?backend_api_base=http://127.0.0.1:8793`
+  - Local storage key: `ig_ops_backend_api_base_v1`
+- Runtime config: `window.__IG2_RUNTIME_CONFIG__.BACKEND_API_BASE`
 - Default fallback: `http://127.0.0.1:8793`
 
-This lets you switch ports/environments without editing source.
+This lets you switch ports/environments without editing source only when public override is explicitly enabled. For deployed/public environments, keep `ALLOW_PUBLIC_API_BASE_OVERRIDE=false` and set the backend URL through `config.js`.
 
 You can also edit API Base directly from the top auth toolbar in frontend:
 - Dropdown `近期 API Base` for quick switching between recent endpoints

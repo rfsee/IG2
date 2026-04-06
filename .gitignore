@@ -8,3 +8,5 @@ backend/backend_open.log
 frontend_server.log
 .sisyphus/
 backend/data/
+test-results/
+tmp/
