@@ -1308,10 +1308,10 @@ export function createPostgresRepository() {
         await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
         const { rows } = await client.query(
           `DELETE FROM tenant_domain.products
-           WHERE id::text = $2
-             AND tenant_id::text = current_setting('app.tenant_id', true)
-           RETURNING id::text AS id`,
-          [tenantId, productId]
+           WHERE id::text = $1
+              AND tenant_id::text = current_setting('app.tenant_id', true)
+            RETURNING id::text AS id`,
+          [productId]
         );
         if (!rows[0]) {
           throw createHttpError("product_not_found", 404);
