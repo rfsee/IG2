@@ -302,8 +302,12 @@ function hasPersistedState() {
 }
 
 function bindEvents() {
-  refs.addPostBtn.addEventListener("click", openCreatePostDialog);
-  refs.addProductBtn.addEventListener("click", openCreateProductDialog);
+  refs.addPostBtn.addEventListener("click", () => {
+    handleProtectedOnboardingAction("plan", openCreatePostDialog);
+  });
+  refs.addProductBtn.addEventListener("click", () => {
+    handleProtectedOnboardingAction("products", openCreateProductDialog);
+  });
   refs.backupStateBtn.addEventListener("click", () => {
     createStateBackup("manual");
     alert("已建立本機備份快照");
@@ -348,23 +352,6 @@ function bindEvents() {
   refs.authRegisterBtn?.addEventListener("click", onAuthRegister);
   refs.authLoginBtn?.addEventListener("click", onAuthLogin);
   refs.authDisconnectBtn?.addEventListener("click", onAuthDisconnect);
-  refs.brandStrategyGenerateBtn?.addEventListener("click", () => {
-    setTimeout(() => {
-      syncOnboardingProgressFromCurrentState();
-      renderOnboardingExperience();
-    }, 900);
-  });
-  refs.productForm?.addEventListener("submit", () => {
-    setTimeout(() => {
-      markOnboardingStep("products");
-      renderOnboardingExperience();
-    }, 300);
-  });
-  refs.addPostBtn?.addEventListener("click", () => {
-    markOnboardingStep("plan");
-    renderOnboardingExperience();
-  });
-
   refs.filterWeek.addEventListener("change", renderAll);
   refs.filterType.addEventListener("change", renderAll);
   refs.filterStatus.addEventListener("change", renderAll);
@@ -1545,6 +1532,13 @@ async function saveAndGenerateBrandStrategy() {
     }
     await requestBrandStrategyApi("POST", "/api/brand-strategy/generate", { intakeId });
     await syncBrandStrategyFromBackend();
+    if (hasCompletedBrandProfileForOnboarding()) {
+      markOnboardingStep("brand");
+    }
+    if (brandStrategyPlanState?.id) {
+      markOnboardingStep("strategy");
+    }
+    renderOnboardingExperience();
     alert("品牌策略已產生（含文案框架與圖片指令）");
   } finally {
     refs.brandStrategyPanel?.classList.remove("is-generating");
@@ -1618,36 +1612,67 @@ function saveOnboardingProgress(progress) {
   sessionStorage.setItem(ONBOARDING_PROGRESS_STORAGE_KEY, JSON.stringify(progress));
 }
 
+function hasCompletedBrandProfileForOnboarding() {
+  const requiredValues = [
+    refs.brandStrategyBrandName?.value,
+    refs.brandStrategyIndustry?.value,
+    refs.brandStrategyTargetAudience?.value,
+    refs.brandStrategyBusinessGoal?.value
+  ];
+  return requiredValues.every((value) => String(value || "").trim().length > 0);
+}
+
 function markOnboardingStep(stepKey) {
   const progress = loadOnboardingProgress();
+  const stepIndex = ONBOARDING_STEPS.findIndex((step) => step.key === stepKey);
+  if (stepIndex === -1) {
+    return false;
+  }
+  const previousStepsDone = ONBOARDING_STEPS.slice(0, stepIndex).every((step) => Boolean(progress[step.key]));
+  if (!previousStepsDone) {
+    return false;
+  }
   progress[stepKey] = true;
   saveOnboardingProgress(progress);
+  return true;
 }
 
 function syncOnboardingProgressFromCurrentState() {
   const progress = loadOnboardingProgress();
   if (hasConnectedAuthSession()) {
     progress.auth = true;
+    saveOnboardingProgress(progress);
+    return progress;
   }
-  if (brandStrategyIntakeState?.id || String(refs.brandStrategyBrandName?.value || "").trim()) {
-    progress.brand = true;
-  }
-  if (Array.isArray(state.products) && state.products.length > seedProducts.length) {
-    progress.products = true;
-  }
-  if (brandStrategyPlanState?.id) {
-    progress.strategy = true;
-  }
-  if (Array.isArray(state.posts) && state.posts.length > 0 && progress.strategy) {
-    progress.plan = true;
-  }
-  saveOnboardingProgress(progress);
-  return progress;
+  saveOnboardingProgress({});
+  return {};
 }
 
 function getCurrentOnboardingStep(progress = syncOnboardingProgressFromCurrentState()) {
   const currentIndex = ONBOARDING_STEPS.findIndex((step) => !progress[step.key]);
   return currentIndex === -1 ? ONBOARDING_STEPS.length - 1 : currentIndex;
+}
+
+function isOnboardingStepAccessible(stepKey, progress = syncOnboardingProgressFromCurrentState()) {
+  const targetIndex = ONBOARDING_STEPS.findIndex((step) => step.key === stepKey);
+  if (targetIndex === -1) {
+    return false;
+  }
+  const currentIndex = getCurrentOnboardingStep(progress);
+  return targetIndex <= currentIndex;
+}
+
+function handleProtectedOnboardingAction(stepKey, onAllowed) {
+  const progress = syncOnboardingProgressFromCurrentState();
+  if (!isOnboardingStepAccessible(stepKey, progress)) {
+    const currentStep = ONBOARDING_STEPS[getCurrentOnboardingStep(progress)];
+    if (currentStep) {
+      navigateOnboardingStep(currentStep.key);
+    }
+    return false;
+  }
+  onAllowed();
+  return true;
 }
 
 function renderOnboardingExperience() {
@@ -1677,8 +1702,22 @@ function renderOnboardingExperience() {
   }
   renderOnboardingStepper(progress, currentIndex, completedAll);
   renderOnboardingActions(currentStep, completedAll);
+  renderProtectedActionButtons(progress, completedAll);
   toggleOnboardingPanels(progress, completedAll);
   document.body.classList.toggle("is-onboarding-active", !completedAll);
+}
+
+function renderProtectedActionButtons(progress, completedAll) {
+  const productUnlocked = completedAll || isOnboardingStepAccessible("products", progress);
+  const planUnlocked = completedAll || isOnboardingStepAccessible("plan", progress);
+  if (refs.addProductBtn) {
+    refs.addProductBtn.disabled = !productUnlocked;
+    refs.addProductBtn.setAttribute("aria-disabled", String(!productUnlocked));
+  }
+  if (refs.addPostBtn) {
+    refs.addPostBtn.disabled = !planUnlocked;
+    refs.addPostBtn.setAttribute("aria-disabled", String(!planUnlocked));
+  }
 }
 
 function renderOnboardingStepper(progress, currentIndex, completedAll) {
@@ -1688,8 +1727,9 @@ function renderOnboardingStepper(progress, currentIndex, completedAll) {
   refs.onboardingStepper.innerHTML = ONBOARDING_STEPS.map((step, index) => {
     const isDone = Boolean(progress[step.key]);
     const stateLabel = isDone ? "done" : completedAll || index === currentIndex ? "current" : "locked";
+    const isLocked = !completedAll && index > currentIndex;
     return `
-      <button class="onboarding-step ${stateLabel}" type="button" data-step-target="${step.key}">
+      <button class="onboarding-step ${stateLabel}" type="button" data-step-target="${step.key}" ${isLocked ? "disabled aria-disabled=\"true\"" : ""}>
         <span class="onboarding-step__index">${index + 1}</span>
         <span class="onboarding-step__copy">
           <strong>${step.label}</strong>
@@ -1735,6 +1775,14 @@ function toggleOnboardingPanels(progress, completedAll) {
 }
 
 function navigateOnboardingStep(stepKey) {
+  const progress = syncOnboardingProgressFromCurrentState();
+  if (!isOnboardingStepAccessible(stepKey, progress)) {
+    const currentStep = ONBOARDING_STEPS[getCurrentOnboardingStep(progress)];
+    if (currentStep && currentStep.key !== stepKey) {
+      navigateOnboardingStep(currentStep.key);
+    }
+    return;
+  }
   if (stepKey === "auth") {
     refs.authEmail?.focus();
     refs.authEmail?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1755,7 +1803,13 @@ function navigateOnboardingStep(stepKey) {
     return;
   }
   if (stepKey === "plan") {
-    document.getElementById("posts-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const planningWallPanel = document.getElementById("planning-wall-panel");
+    if (!planningWallPanel) {
+      return;
+    }
+    planningWallPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    markOnboardingStep("plan");
+    renderOnboardingExperience();
   }
 }
 
@@ -2942,7 +2996,9 @@ function onSubmitProduct(event) {
   syncDraftTitlesWithProducts(false);
   saveState();
   refs.productDialog.close();
+  markOnboardingStep("products");
   renderAll();
+  renderOnboardingExperience();
 }
 
 function onPostsTableClick(event) {
