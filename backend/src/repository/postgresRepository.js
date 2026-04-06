@@ -1232,20 +1232,19 @@ export function createPostgresRepository() {
         const statusCandidate = input?.status === undefined ? null : String(input.status || "").trim() || null;
         const { rows } = await client.query(
           `UPDATE tenant_domain.products
-           SET name = $3,
-               price = $4,
-               size = $5,
-               material = $6,
-               selling = $7,
-               link = $8,
-               scene = $9,
-                status = COALESCE($10, status),
+           SET name = $2,
+               price = $3,
+               size = $4,
+               material = $5,
+               selling = $6,
+               link = $7,
+               scene = $8,
+                status = COALESCE($9, status),
                 updated_at = NOW()
-            WHERE id::text = $2
+            WHERE id::text = $1
               AND tenant_id::text = current_setting('app.tenant_id', true)
             RETURNING id::text AS id, name, price, size, material, selling, link, scene, status`,
           [
-            tenantId,
             productId,
             String(input.name || "").trim(),
             Number(input.price || 0),

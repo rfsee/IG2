@@ -1,8 +1,8 @@
 const BASE_URL = String(process.env.BASE_URL || "http://127.0.0.1:8793").replace(/\/+$/, "");
 const MAIN_EMAIL = String(process.env.MAIN_EMAIL || "main@gmail.com").trim();
-const MAIN_PASSWORD = String(process.env.MAIN_PASSWORD || "123456");
+const MAIN_PASSWORD = String(process.env.MAIN_PASSWORD || "1234567890");
 const ISOLATION_EMAIL = String(process.env.ISOLATION_EMAIL || "smoke_isolation@test.local").trim();
-const ISOLATION_PASSWORD = String(process.env.ISOLATION_PASSWORD || "123456");
+const ISOLATION_PASSWORD = String(process.env.ISOLATION_PASSWORD || "1234567890");
 const ISOLATION_STORE_NAME = String(process.env.ISOLATION_STORE_NAME || "smoke_isolation_store").trim();
 const AUTH_REGISTER_ENABLED = parseEnvBoolean(process.env.AUTH_REGISTER_ENABLED, true);
 const AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX = String(process.env.AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX || "").trim();
@@ -89,7 +89,7 @@ async function main() {
   }
   assert(mainAuthPayload.status === 200, `main login failed: ${mainAuthPayload.status}`);
   const mainCookie = buildSessionCookie(mainAuthPayload.headers || mainLogin.headers);
-  const mainToken = String(mainAuthPayload.json.token || "");
+  const mainToken = String(mainAuthPayload.json.token || mainCookie || "");
   const mainTenantId =
     mainAuthPayload.json.items?.find((item) => item.tenantId === "tenant_default")?.tenantId ||
     mainAuthPayload.json.items?.[0]?.tenantId;
@@ -1259,7 +1259,7 @@ async function ensureIsolationAccount() {
   });
   if (login.status === 200) {
     return {
-      token: String(login.json.token || ""),
+      token: String(login.json.token || buildSessionCookie(login.headers) || ""),
       cookie: buildSessionCookie(login.headers),
       tenantId: login.json.items?.[0]?.tenantId
     };
@@ -1272,7 +1272,7 @@ async function ensureIsolationAccount() {
   });
   assert(register.status === 201, `register isolation user failed: ${register.status}`);
   return {
-    token: String(register.json.token || ""),
+    token: String(register.json.token || buildSessionCookie(register.headers) || ""),
     cookie: buildSessionCookie(register.headers),
     tenantId: register.json.items?.[0]?.tenantId
   };
@@ -1283,11 +1283,13 @@ async function authedJson(token, tenantId, method, path, body, extraHeaders = {}
     "x-tenant-id": String(tenantId),
     ...extraHeaders
   };
-  if (token) {
-    headers.authorization = `Bearer ${token}`;
-  }
   if (cookie) {
     headers.cookie = cookie;
+  }
+  if (token && String(token).startsWith("ig2_session=")) {
+    headers.cookie = String(token);
+  } else if (token) {
+    headers.authorization = `Bearer ${token}`;
   }
   if (body !== undefined) {
     headers["content-type"] = "application/json";
@@ -1301,9 +1303,13 @@ async function authedJson(token, tenantId, method, path, body, extraHeaders = {}
 
 async function authJson(token, method, path, body, extraHeaders = {}) {
   const headers = {
-    authorization: `Bearer ${token}`,
     ...extraHeaders
   };
+  if (token && String(token).startsWith("ig2_session=")) {
+    headers.cookie = String(token);
+  } else if (token) {
+    headers.authorization = `Bearer ${token}`;
+  }
   if (body !== undefined) {
     headers["content-type"] = "application/json";
   }
