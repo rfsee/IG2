@@ -83,15 +83,17 @@ async function main() {
     assert(mainRegister.status === 201, `main register failed after login miss: ${mainRegister.status}`);
     mainAuthPayload = {
       status: 200,
-      json: mainRegister.json
+      json: mainRegister.json,
+      headers: mainRegister.headers
     };
   }
   assert(mainAuthPayload.status === 200, `main login failed: ${mainAuthPayload.status}`);
+  const mainCookie = buildSessionCookie(mainAuthPayload.headers || mainLogin.headers);
   const mainToken = String(mainAuthPayload.json.token || "");
   const mainTenantId =
     mainAuthPayload.json.items?.find((item) => item.tenantId === "tenant_default")?.tenantId ||
     mainAuthPayload.json.items?.[0]?.tenantId;
-  assert(mainToken && mainTenantId, "main auth payload missing token or tenant");
+  assert((mainToken || mainCookie) && mainTenantId, "main auth payload missing session or tenant");
 
   try {
     const brandStrategyIntakeSave = await authedJson(mainToken, mainTenantId, "POST", "/api/brand-strategy/intake", {
@@ -1258,6 +1260,7 @@ async function ensureIsolationAccount() {
   if (login.status === 200) {
     return {
       token: String(login.json.token || ""),
+      cookie: buildSessionCookie(login.headers),
       tenantId: login.json.items?.[0]?.tenantId
     };
   }
@@ -1270,16 +1273,22 @@ async function ensureIsolationAccount() {
   assert(register.status === 201, `register isolation user failed: ${register.status}`);
   return {
     token: String(register.json.token || ""),
+    cookie: buildSessionCookie(register.headers),
     tenantId: register.json.items?.[0]?.tenantId
   };
 }
 
-async function authedJson(token, tenantId, method, path, body, extraHeaders = {}) {
+async function authedJson(token, tenantId, method, path, body, extraHeaders = {}, cookie = "") {
   const headers = {
-    authorization: `Bearer ${token}`,
     "x-tenant-id": String(tenantId),
     ...extraHeaders
   };
+  if (token) {
+    headers.authorization = `Bearer ${token}`;
+  }
+  if (cookie) {
+    headers.cookie = cookie;
+  }
   if (body !== undefined) {
     headers["content-type"] = "application/json";
   }
@@ -1316,7 +1325,12 @@ async function postJson(path, body) {
 async function fetchJson(path, init = {}) {
   const response = await fetch(`${BASE_URL}${path}`, init);
   const json = await response.json().catch(() => ({}));
-  return { status: response.status, json };
+  return { status: response.status, json, headers: Object.fromEntries(response.headers.entries()) };
+}
+
+function buildSessionCookie(headers) {
+  const raw = String(headers?.["set-cookie"] || "").trim();
+  return raw ? raw.split(";")[0] : "";
 }
 
 function assert(condition, message) {

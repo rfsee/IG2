@@ -1583,7 +1583,7 @@ function loadAuthSession() {
       return null;
     }
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || !parsed.connected || !parsed.token) {
+    if (!parsed || typeof parsed !== "object" || !parsed.connected || !parsed.activeTenantId) {
       return null;
     }
     return {
@@ -1704,11 +1704,8 @@ async function onAuthLogin() {
 }
 
 async function onAuthDisconnect() {
-  const session = loadAuthSession();
   try {
-    if (session?.token) {
-      await requestAuthLogout(session.token);
-    }
+    await requestAuthLogout();
   } catch (_error) {
   } finally {
     clearAuthSession();

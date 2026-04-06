@@ -101,7 +101,8 @@ Also send:
 
 - `POST /api/auth/register` with `{ email, password, storeName }`
 - `POST /api/auth/login` with `{ email, password }`
-- Response returns `{ actorId, token, items }` for immediate frontend session bootstrap.
+- Response returns `{ actorId, items }` and sets an `HttpOnly` session cookie for browser auth.
+- `GET /api/auth/session` returns the current authenticated actor + visible tenants when the session cookie is valid.
 - Works with both repository providers (`memory` / `postgres`) after running latest migrations.
 
 ### Internal-only registration mode (recommended for team testing)
