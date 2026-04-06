@@ -1815,10 +1815,11 @@ function markOnboardingStepComplete(state, stepKey) {
 }
 
 const DEFAULT_ONBOARDING_STEPS = [
-  { key: "connect_backend", label: "連接後端帳號" },
+  { key: "register_login", label: "註冊或登入帳號" },
+  { key: "create_brand", label: "建立品牌定位" },
   { key: "import_products", label: "匯入或建立第一批商品" },
-  { key: "create_weekly_plan", label: "建立本週第一份貼文規劃" },
-  { key: "review_kpi", label: "查看 KPI 與每週總覽" }
+  { key: "generate_strategy", label: "產生第一份品牌策略" },
+  { key: "create_weekly_plan", label: "建立本週第一份貼文規劃" }
 ];
 
 const DEFAULT_TEMPLATE_CATALOG = [
