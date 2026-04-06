@@ -190,6 +190,7 @@ const server = createServer(async (req, res) => {
         passwordMinLength: AUTH_PASSWORD_MIN_LENGTH
       });
       const items = await services.repository.listVisibleTenants(registered.actorId);
+      const authToken = await issueAuthSessionToken(services, registered.actorId);
       const primaryTenant = items[0];
       if (primaryTenant?.tenantId) {
         await writeAudit(
@@ -212,9 +213,8 @@ const server = createServer(async (req, res) => {
           req.socket?.remoteAddress || ""
         );
       }
-      const authPayload = await buildAuthResponse(services, registered.actorId, items);
-      applyAuthSessionCookie(res, authPayload.token);
-      return sendJson(res, 201, authPayload);
+      applyAuthSessionCookie(res, authToken);
+      return sendJson(res, 201, buildAuthResponse(registered.actorId, items));
     }
 
     if (req.method === "POST" && url.pathname === "/api/auth/login") {
@@ -229,6 +229,7 @@ const server = createServer(async (req, res) => {
         passwordMinLength: AUTH_PASSWORD_MIN_LENGTH
       });
       const items = await services.repository.listVisibleTenants(loggedIn.actorId);
+      const authToken = await issueAuthSessionToken(services, loggedIn.actorId);
       const primaryTenant = items[0];
       if (primaryTenant?.tenantId) {
         await writeAudit(
@@ -251,9 +252,8 @@ const server = createServer(async (req, res) => {
           req.socket?.remoteAddress || ""
         );
       }
-      const authPayload = await buildAuthResponse(services, loggedIn.actorId, items);
-      applyAuthSessionCookie(res, authPayload.token);
-      return sendJson(res, 200, authPayload);
+      applyAuthSessionCookie(res, authToken);
+      return sendJson(res, 200, buildAuthResponse(loggedIn.actorId, items));
     }
 
     if (req.method === "POST" && url.pathname === "/api/auth/logout") {
@@ -1635,15 +1635,18 @@ function normalizeBrandStrategyKeywords(raw) {
   return normalized;
 }
 
-async function buildAuthResponse(services, actorId, items) {
-  const token = typeof services?.authProvider?.issueToken === "function"
-    ? await services.authProvider.issueToken(actorId)
-    : `dev_user_${actorId}`;
+function buildAuthResponse(actorId, items) {
   return {
     actorId,
-    token,
     items: Array.isArray(items) ? items : []
   };
+}
+
+async function issueAuthSessionToken(services, actorId) {
+  if (typeof services?.authProvider?.issueToken === "function") {
+    return services.authProvider.issueToken(actorId);
+  }
+  return `dev_user_${actorId}`;
 }
 
 function applyCorsHeaders(req, res) {

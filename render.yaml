@@ -22,5 +22,9 @@
         sync: false
       - key: CORS_ALLOWED_ORIGINS
         sync: false
+      - key: AUTH_SESSION_TTL_DAYS
+        value: "3"
+      - key: AUTH_PASSWORD_MIN_LENGTH
+        value: "10"
       - key: DATABASE_URL
         sync: false

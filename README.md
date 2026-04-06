@@ -165,8 +165,9 @@ AUTH_REGISTER_ENABLED=false
 
 4. **Internal registration safety**
    - Keep:
-     - `AUTH_REGISTER_ENABLED=true`
-     - `AUTH_REGISTER_EMAIL_ALLOWLIST_REGEX=@yourcompany\\.com$`
+      - `AUTH_REGISTER_ENABLED=false`, or
+      - `AUTH_REGISTER_EMAIL_ALLOWLIST=person1@example.com,person2@example.com`
+      - `CORS_ALLOWED_ORIGINS=https://rfsee.github.io`
 
 5. **Verify online environment**
    - Run:
