@@ -16,8 +16,27 @@
       <div class="wrap hero__inner">
         <p class="eyebrow">IG Ops Console</p>
         <h1>IG Growth OS（電商店家版）</h1>
-        <p class="subtitle">直接在這裡做貼文與商品管理：新增、編輯、狀態更新、匯入匯出。</p>
-        <div class="status-bar control-card">
+        <p class="subtitle" id="hero-subtitle">從 0 開始建立品牌、商品與專屬 IG 行銷方案，完成後再進入完整營運控制台。</p>
+        <section class="onboarding-shell panel" id="onboarding-shell">
+          <div class="onboarding-shell__head row-between">
+            <div>
+              <p class="onboarding-shell__eyebrow">First-run guided onboarding</p>
+              <h2 id="onboarding-title">5 步完成你的第一套 IG 行銷方案</h2>
+              <p class="subtitle" id="onboarding-subtitle">先登入，再建立品牌與商品，最後自動進入貼文規劃牆。</p>
+            </div>
+            <span class="onboarding-progress-pill" id="onboarding-progress-pill">Step 1 / 5</span>
+          </div>
+          <div class="onboarding-stepper" id="onboarding-stepper"></div>
+          <div class="onboarding-focus-card" id="onboarding-focus-card">
+            <div class="onboarding-focus-copy">
+              <span class="onboarding-focus-kicker" id="onboarding-focus-kicker">Step 1</span>
+              <h3 id="onboarding-focus-title">先登入或建立帳號</h3>
+              <p id="onboarding-focus-body">建立你的品牌工作區後，系統才能替你儲存品牌策略、商品與貼文計畫。</p>
+            </div>
+            <div class="onboarding-focus-actions" id="onboarding-focus-actions"></div>
+          </div>
+        </section>
+        <div class="status-bar control-card onboarding-chrome">
           <div class="status-bar__left">
             <span class="status-caption">Workspace</span>
             <select id="tenant-select" class="btn" aria-label="選擇店家"></select>
@@ -34,7 +53,7 @@
           </div>
         </div>
 
-        <div class="auth-toolbar control-card">
+        <div class="auth-toolbar control-card onboarding-chrome" id="auth-toolbar">
           <input id="auth-email" type="email" class="btn auth-input" placeholder="註冊/登入 Email" aria-label="註冊登入 email" />
           <input id="auth-password" type="password" class="btn auth-input" placeholder="密碼（至少 10 碼）" aria-label="註冊登入密碼" />
           <input id="auth-store-name" type="text" class="btn auth-input" placeholder="註冊店家名稱" aria-label="註冊店家名稱" />
@@ -44,13 +63,13 @@
           <span id="active-tenant-name" class="btn subtle-chip" aria-live="polite">店家：未登入</span>
         </div>
 
-        <div class="action-hub">
+        <div class="action-hub onboarding-chrome" id="action-hub">
           <div class="action-hub__main control-card">
             <button id="add-post-btn" class="btn btn-primary btn-cta-large" type="button">＋ 新增貼文</button>
             <button id="add-product-btn" class="btn btn-primary btn-cta-large" type="button">＋ 新增商品</button>
             <button id="add-tenant-btn" class="btn btn-secondary" type="button">🏪 新增店家</button>
           </div>
-          <div class="action-hub__secondary control-card">
+          <div class="action-hub__secondary control-card advanced-panel" data-advanced-panel="true">
             <button id="backup-state-btn" class="btn btn-secondary" type="button">🗂 建立備份</button>
             <button id="restore-state-btn" class="btn btn-secondary" type="button">🧯 還原最近備份</button>
             <button id="export-posts-btn" class="btn btn-secondary" type="button">📤 匯出貼文CSV</button>
@@ -69,9 +88,9 @@
     </header>
 
     <main class="wrap page">
-      <section class="kpi-grid" id="kpi-grid"></section>
+      <section class="kpi-grid advanced-panel" id="kpi-grid" data-advanced-panel="true"></section>
 
-      <section class="panel" id="brand-strategy-panel">
+      <section class="panel onboarding-panel" id="brand-strategy-panel" data-onboarding-panel="brand">
         <div class="panel-head row-between">
           <h2>品牌策略引擎（新品牌 onboarding）</h2>
           <div class="actions-inline">
@@ -105,7 +124,7 @@
         <div id="brand-strategy-output"></div>
       </section>
 
-      <section class="panel board-panel">
+      <section class="panel board-panel onboarding-panel" id="planning-wall-panel" data-onboarding-panel="plan">
         <div class="panel-head">
           <h2>狀態看板</h2>
         </div>
@@ -123,7 +142,7 @@
         <div class="weekly-plan-overview" id="weekly-plan-overview"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel onboarding-panel" id="posts-panel" data-onboarding-panel="posts">
         <div class="panel-head row-between">
           <h2>貼文管理</h2>
         </div>
@@ -174,7 +193,7 @@
         </div>
       </section>
 
-      <section class="panel product-manage-panel">
+      <section class="panel product-manage-panel onboarding-panel" id="products-panel" data-onboarding-panel="products">
         <div class="panel-head row-between"><h2>商品管理</h2></div>
         <div class="actions-inline product-batch-bar control-card">
           <select id="products-batch-status" class="btn" aria-label="商品批次狀態">
@@ -195,7 +214,7 @@
         </div>
       </section>
 
-      <section class="panel dm-salon-panel">
+      <section class="panel dm-salon-panel advanced-panel" data-advanced-panel="true">
         <div class="panel-head dm-title-head"><h2><span class="title-accent"></span>DM 轉單引擎</h2></div>
         <div class="form-grid dm-salon-grid">
           <label class="dm-chip-field">來源貼文
@@ -233,7 +252,7 @@
         </div>
       </section>
 
-      <section class="panel" id="comments-panel">
+      <section class="panel advanced-panel" id="comments-panel" data-advanced-panel="true">
         <div class="panel-head row-between">
           <h2><span class="title-accent"></span>協作留言與 @提及</h2>
           <div class="actions-inline">
@@ -256,7 +275,7 @@
         <div id="comments-list"></div>
       </section>
 
-      <section class="panel weekly-report-panel">
+      <section class="panel weekly-report-panel advanced-panel" data-advanced-panel="true">
         <div class="panel-head row-between">
           <h2><span class="title-accent"></span>Growth Analyst 週報引擎</h2>
           <div class="actions-inline">
@@ -270,7 +289,7 @@
         <ul id="weekly-actions"></ul>
       </section>
 
-      <section class="panel agent-runs-panel">
+      <section class="panel agent-runs-panel advanced-panel" data-advanced-panel="true">
         <div class="panel-head row-between">
           <h2><span class="title-accent"></span>Agent 執行紀錄（當前店家）</h2>
         </div>
@@ -284,7 +303,7 @@
         </div>
       </section>
 
-      <section class="panel sop-panel">
+      <section class="panel sop-panel advanced-panel" data-advanced-panel="true">
         <div class="panel-head row-between">
           <h2>🕒 每日 15 分鐘 SOP</h2>
           <button class="btn" id="sop-reset-btn" type="button">重置今日勾選</button>

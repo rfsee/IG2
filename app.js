@@ -9,6 +9,7 @@ const PRODUCT_COVER_CACHE_KEY = "ig_ops_product_cover_cache_v1";
 const BRAND_STRATEGY_API_BASE_STORAGE_KEY = "ig_ops_backend_api_base_v1";
 const BRAND_STRATEGY_AUTH_SESSION_KEY = "ig_ops_auth_session_v1";
 const TENANT_SELECTION_STORAGE_KEY = "ig_ops_tenants_v1";
+const ONBOARDING_PROGRESS_STORAGE_KEY = "ig_ops_onboarding_progress_v1";
 const BRAND_STRATEGY_API_BASE_DEFAULT = "http://127.0.0.1:8793";
 const RUNTIME_CONFIG = typeof window !== "undefined" ? window.__IG2_RUNTIME_CONFIG__ || {} : {};
 const SHOPEE_SHOP_ID = "179481064";
@@ -122,6 +123,16 @@ let brandStrategyIntakeState = null;
 let brandStrategyPlanState = null;
 
 const refs = {
+  onboardingShell: document.getElementById("onboarding-shell"),
+  onboardingTitle: document.getElementById("onboarding-title"),
+  onboardingSubtitle: document.getElementById("onboarding-subtitle"),
+  onboardingProgressPill: document.getElementById("onboarding-progress-pill"),
+  onboardingStepper: document.getElementById("onboarding-stepper"),
+  onboardingFocusKicker: document.getElementById("onboarding-focus-kicker"),
+  onboardingFocusTitle: document.getElementById("onboarding-focus-title"),
+  onboardingFocusBody: document.getElementById("onboarding-focus-body"),
+  onboardingFocusActions: document.getElementById("onboarding-focus-actions"),
+  heroSubtitle: document.getElementById("hero-subtitle"),
   kpiGrid: document.getElementById("kpi-grid"),
   weeklyProductsTitle: document.getElementById("weekly-products-title"),
   weeklyProducts: document.getElementById("weekly-products"),
@@ -213,6 +224,44 @@ const refs = {
   productScene: document.getElementById("product-scene")
 };
 
+const ONBOARDING_STEPS = [
+  {
+    key: "auth",
+    label: "登入 / 建立帳號",
+    title: "先登入或建立帳號",
+    body: "先建立你的品牌工作區，後面的品牌策略、商品與貼文規劃才會真正屬於你。",
+    actionLabel: "前往登入區"
+  },
+  {
+    key: "brand",
+    label: "建立品牌",
+    title: "填好品牌定位與受眾",
+    body: "把品牌名稱、產業、目標受眾與商業目標填完整，讓策略引擎知道你要賣給誰。",
+    actionLabel: "前往品牌策略"
+  },
+  {
+    key: "products",
+    label: "輸入商品",
+    title: "先建立至少 1 個主力商品",
+    body: "輸入商品名稱、價格、賣點與連結，後續的貼文與 DM 腳本才會更像你的真實商品。",
+    actionLabel: "新增商品"
+  },
+  {
+    key: "strategy",
+    label: "生成策略",
+    title: "產出第一版專屬 IG 策略",
+    body: "按一次儲存品牌策略，系統會根據你輸入的品牌資訊整理內容支柱、IG 牆方向與文案語氣。",
+    actionLabel: "生成品牌策略"
+  },
+  {
+    key: "plan",
+    label: "進入規劃牆",
+    title: "開始把策略變成貼文計畫",
+    body: "進入貼文管理與本週規劃牆，把第一篇內容排進去，正式開始營運。",
+    actionLabel: "前往貼文規劃"
+  }
+];
+
 loadProductCoverCache();
 bindEvents();
 initAuthUi();
@@ -222,12 +271,15 @@ if (loadResult.needsPersist) {
 }
 syncDraftTitlesWithProducts(true);
 renderAll();
+renderOnboardingExperience();
 if (hasConnectedAuthSession()) {
   syncBrandStrategyFromBackend().catch(() => {
     if (refs.brandStrategySummary) {
       refs.brandStrategySummary.textContent = "品牌策略暫時離線，請確認登入狀態與後端服務。";
     }
     renderBrandStrategyPanel();
+  }).finally(() => {
+    renderOnboardingExperience();
   });
 } else if (refs.brandStrategySummary) {
   refs.brandStrategySummary.textContent = "請先登入以讀取品牌策略與雲端資料。";
@@ -296,6 +348,22 @@ function bindEvents() {
   refs.authRegisterBtn?.addEventListener("click", onAuthRegister);
   refs.authLoginBtn?.addEventListener("click", onAuthLogin);
   refs.authDisconnectBtn?.addEventListener("click", onAuthDisconnect);
+  refs.brandStrategyGenerateBtn?.addEventListener("click", () => {
+    setTimeout(() => {
+      syncOnboardingProgressFromCurrentState();
+      renderOnboardingExperience();
+    }, 900);
+  });
+  refs.productForm?.addEventListener("submit", () => {
+    setTimeout(() => {
+      markOnboardingStep("products");
+      renderOnboardingExperience();
+    }, 300);
+  });
+  refs.addPostBtn?.addEventListener("click", () => {
+    markOnboardingStep("plan");
+    renderOnboardingExperience();
+  });
 
   refs.filterWeek.addEventListener("change", renderAll);
   refs.filterType.addEventListener("change", renderAll);
@@ -1533,6 +1601,164 @@ async function requestBrandStrategyApi(method, path, body) {
   return payload;
 }
 
+function loadOnboardingProgress() {
+  try {
+    const raw = sessionStorage.getItem(ONBOARDING_PROGRESS_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function saveOnboardingProgress(progress) {
+  sessionStorage.setItem(ONBOARDING_PROGRESS_STORAGE_KEY, JSON.stringify(progress));
+}
+
+function markOnboardingStep(stepKey) {
+  const progress = loadOnboardingProgress();
+  progress[stepKey] = true;
+  saveOnboardingProgress(progress);
+}
+
+function syncOnboardingProgressFromCurrentState() {
+  const progress = loadOnboardingProgress();
+  if (hasConnectedAuthSession()) {
+    progress.auth = true;
+  }
+  if (brandStrategyIntakeState?.id || String(refs.brandStrategyBrandName?.value || "").trim()) {
+    progress.brand = true;
+  }
+  if (Array.isArray(state.products) && state.products.length > seedProducts.length) {
+    progress.products = true;
+  }
+  if (brandStrategyPlanState?.id) {
+    progress.strategy = true;
+  }
+  if (Array.isArray(state.posts) && state.posts.length > 0 && progress.strategy) {
+    progress.plan = true;
+  }
+  saveOnboardingProgress(progress);
+  return progress;
+}
+
+function getCurrentOnboardingStep(progress = syncOnboardingProgressFromCurrentState()) {
+  const currentIndex = ONBOARDING_STEPS.findIndex((step) => !progress[step.key]);
+  return currentIndex === -1 ? ONBOARDING_STEPS.length - 1 : currentIndex;
+}
+
+function renderOnboardingExperience() {
+  const progress = syncOnboardingProgressFromCurrentState();
+  const currentIndex = getCurrentOnboardingStep(progress);
+  const currentStep = ONBOARDING_STEPS[currentIndex];
+  const completedAll = ONBOARDING_STEPS.every((step) => progress[step.key]);
+
+  if (refs.onboardingProgressPill) {
+    refs.onboardingProgressPill.textContent = completedAll ? "已完成 onboarding" : `Step ${currentIndex + 1} / ${ONBOARDING_STEPS.length}`;
+  }
+  if (refs.onboardingFocusKicker) {
+    refs.onboardingFocusKicker.textContent = completedAll ? "Ready" : `Step ${currentIndex + 1}`;
+  }
+  if (refs.onboardingFocusTitle) {
+    refs.onboardingFocusTitle.textContent = completedAll ? "你已經可以開始完整營運" : currentStep.title;
+  }
+  if (refs.onboardingFocusBody) {
+    refs.onboardingFocusBody.textContent = completedAll
+      ? "品牌、商品與策略都已就位，現在可以直接進入貼文管理、DM 與週報工作流。"
+      : currentStep.body;
+  }
+  if (refs.heroSubtitle) {
+    refs.heroSubtitle.textContent = completedAll
+      ? "你已完成第一輪設定，現在可直接進入完整營運控制台。"
+      : "先跟著 5 步流程完成第一輪設定，再進入完整營運控制台。";
+  }
+  renderOnboardingStepper(progress, currentIndex, completedAll);
+  renderOnboardingActions(currentStep, completedAll);
+  toggleOnboardingPanels(progress, completedAll);
+  document.body.classList.toggle("is-onboarding-active", !completedAll);
+}
+
+function renderOnboardingStepper(progress, currentIndex, completedAll) {
+  if (!refs.onboardingStepper) {
+    return;
+  }
+  refs.onboardingStepper.innerHTML = ONBOARDING_STEPS.map((step, index) => {
+    const isDone = Boolean(progress[step.key]);
+    const stateLabel = isDone ? "done" : completedAll || index === currentIndex ? "current" : "locked";
+    return `
+      <button class="onboarding-step ${stateLabel}" type="button" data-step-target="${step.key}">
+        <span class="onboarding-step__index">${index + 1}</span>
+        <span class="onboarding-step__copy">
+          <strong>${step.label}</strong>
+          <small>${isDone ? "已完成" : index === currentIndex ? "進行中" : "待完成"}</small>
+        </span>
+      </button>
+    `;
+  }).join("");
+  refs.onboardingStepper.querySelectorAll("[data-step-target]").forEach((button) => {
+    button.addEventListener("click", () => navigateOnboardingStep(button.dataset.stepTarget));
+  });
+}
+
+function renderOnboardingActions(currentStep, completedAll) {
+  if (!refs.onboardingFocusActions) {
+    return;
+  }
+  const actionHtml = completedAll
+    ? `
+      <button class="btn btn-primary" type="button" data-onboarding-action="plan">開始貼文規劃</button>
+      <button class="btn btn-secondary" type="button" data-onboarding-action="products">查看商品列表</button>
+    `
+    : `<button class="btn btn-primary" type="button" data-onboarding-action="${currentStep.key}">${currentStep.actionLabel}</button>`;
+  refs.onboardingFocusActions.innerHTML = actionHtml;
+  refs.onboardingFocusActions.querySelectorAll("[data-onboarding-action]").forEach((button) => {
+    button.addEventListener("click", () => navigateOnboardingStep(button.dataset.onboardingAction));
+  });
+}
+
+function toggleOnboardingPanels(progress, completedAll) {
+  const stepOrder = { brand: 1, products: 2, plan: 4, posts: 4 };
+  const currentIndex = getCurrentOnboardingStep(progress);
+  document.querySelectorAll("[data-onboarding-panel]").forEach((panel) => {
+    const key = panel.getAttribute("data-onboarding-panel");
+    const panelIndex = Number(stepOrder[key] ?? ONBOARDING_STEPS.length - 1);
+    const unlocked = completedAll || panelIndex <= currentIndex + 1;
+    panel.classList.toggle("is-step-locked", !unlocked);
+    panel.hidden = !completedAll && !unlocked && key !== "brand";
+  });
+  document.querySelectorAll("[data-advanced-panel]").forEach((panel) => {
+    panel.hidden = !completedAll;
+  });
+}
+
+function navigateOnboardingStep(stepKey) {
+  if (stepKey === "auth") {
+    refs.authEmail?.focus();
+    refs.authEmail?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+  if (stepKey === "brand") {
+    refs.brandStrategyPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+    refs.brandStrategyBrandName?.focus();
+    return;
+  }
+  if (stepKey === "products") {
+    refs.addProductBtn?.click();
+    return;
+  }
+  if (stepKey === "strategy") {
+    refs.brandStrategyPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+    refs.brandStrategyGenerateBtn?.focus();
+    return;
+  }
+  if (stepKey === "plan") {
+    document.getElementById("posts-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
 function resolveBrandStrategyApiBase() {
   const allowPublicOverride = Boolean(RUNTIME_CONFIG.ALLOW_PUBLIC_API_BASE_OVERRIDE);
   if (allowPublicOverride) {
@@ -1669,6 +1895,8 @@ async function onAuthRegister() {
     const storeName = String(refs.authStoreName?.value || "").trim();
     const payload = await requestAuthApi("/api/auth/register", { email, password, storeName });
     const session = persistAuthSession(payload);
+    markOnboardingStep("auth");
+    renderOnboardingExperience();
     if (refs.brandStrategySummary) {
       refs.brandStrategySummary.textContent = `已登入 ${session.activeTenantName || "新店家"}，正在同步品牌策略。`;
     }
@@ -1689,6 +1917,8 @@ async function onAuthLogin() {
     const password = String(refs.authPassword?.value || "").trim();
     const payload = await requestAuthApi("/api/auth/login", { email, password });
     const session = persistAuthSession(payload);
+    markOnboardingStep("auth");
+    renderOnboardingExperience();
     if (refs.brandStrategySummary) {
       refs.brandStrategySummary.textContent = `已登入 ${session.activeTenantName || "目前店家"}，正在同步品牌策略。`;
     }
@@ -1709,6 +1939,8 @@ async function onAuthDisconnect() {
   } catch (_error) {
   } finally {
     clearAuthSession();
+    saveOnboardingProgress({});
+    renderOnboardingExperience();
     if (refs.brandStrategySummary) {
       refs.brandStrategySummary.textContent = "已登出。請重新登入以讀取品牌策略與雲端資料。";
     }
