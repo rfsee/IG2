@@ -10,6 +10,7 @@ const BRAND_STRATEGY_API_BASE_STORAGE_KEY = "ig_ops_backend_api_base_v1";
 const BRAND_STRATEGY_AUTH_SESSION_KEY = "ig_ops_auth_session_v1";
 const TENANT_SELECTION_STORAGE_KEY = "ig_ops_tenants_v1";
 const ONBOARDING_PROGRESS_STORAGE_KEY = "ig_ops_onboarding_progress_v1";
+const ONBOARDING_VIEW_MODE_STORAGE_KEY = "ig_ops_onboarding_view_mode_v1";
 const BRAND_STRATEGY_API_BASE_DEFAULT = "http://127.0.0.1:8793";
 const RUNTIME_CONFIG = typeof window !== "undefined" ? window.__IG2_RUNTIME_CONFIG__ || {} : {};
 const SHOPEE_SHOP_ID = "179481064";
@@ -126,6 +127,8 @@ const refs = {
   onboardingShell: document.getElementById("onboarding-shell"),
   onboardingTitle: document.getElementById("onboarding-title"),
   onboardingSubtitle: document.getElementById("onboarding-subtitle"),
+  onboardingModeNote: document.getElementById("onboarding-mode-note"),
+  onboardingModeToggleBtn: document.getElementById("onboarding-mode-toggle-btn"),
   onboardingProgressPill: document.getElementById("onboarding-progress-pill"),
   onboardingStepper: document.getElementById("onboarding-stepper"),
   onboardingFocusKicker: document.getElementById("onboarding-focus-kicker"),
@@ -137,6 +140,7 @@ const refs = {
   weeklyProductsTitle: document.getElementById("weekly-products-title"),
   weeklyProducts: document.getElementById("weekly-products"),
   weeklyPlanOverview: document.getElementById("weekly-plan-overview"),
+  ctrLearningCenter: document.getElementById("ctr-learning-center"),
   boardProgressFill: document.getElementById("board-progress-fill"),
   boardProgressText: document.getElementById("board-progress-text"),
   postsTbody: document.getElementById("posts-tbody"),
@@ -352,6 +356,7 @@ function bindEvents() {
   refs.authRegisterBtn?.addEventListener("click", onAuthRegister);
   refs.authLoginBtn?.addEventListener("click", onAuthLogin);
   refs.authDisconnectBtn?.addEventListener("click", onAuthDisconnect);
+  refs.onboardingModeToggleBtn?.addEventListener("click", toggleOnboardingViewMode);
   refs.filterWeek.addEventListener("change", renderAll);
   refs.filterType.addEventListener("change", renderAll);
   refs.filterStatus.addEventListener("change", renderAll);
@@ -987,6 +992,207 @@ function ratioText(numerator, denominator) {
   return `${((num / den) * 100).toFixed(1)}%`;
 }
 
+function getCtrLearningMinReach() {
+  return 80;
+}
+
+function getCtrLearningPriorClicks() {
+  return 2;
+}
+
+function getCtrLearningPriorReach() {
+  return 120;
+}
+
+function getPostRawCtr(post) {
+  const clicks = Number(post?.metrics?.clicks || 0);
+  const reach = Number(post?.metrics?.reach || 0);
+  if (reach <= 0) {
+    return 0;
+  }
+  return clicks / reach;
+}
+
+function getPostSmoothedCtr(post) {
+  const clicks = Number(post?.metrics?.clicks || 0);
+  const reach = Number(post?.metrics?.reach || 0);
+  return (clicks + getCtrLearningPriorClicks()) / (reach + getCtrLearningPriorReach());
+}
+
+function classifyCtaBucket(cta) {
+  const text = String(cta || "").trim().toLowerCase();
+  if (!text) {
+    return "未明確 CTA";
+  }
+  if (/私訊|dm|inbox/.test(text)) {
+    return "私訊型 CTA";
+  }
+  if (/留言|comment/.test(text)) {
+    return "留言互動型 CTA";
+  }
+  if (/收藏|save/.test(text)) {
+    return "收藏回訪型 CTA";
+  }
+  if (/點|連結|link|規格|價格表|清單/.test(text)) {
+    return "導流點擊型 CTA";
+  }
+  return "其他 CTA";
+}
+
+function classifyTitleStyle(title) {
+  const text = String(title || "").trim();
+  if (!text) {
+    return "一般敘述型";
+  }
+  if (/\d/.test(text) || /\$/.test(text)) {
+    return "數字／價格開頭型";
+  }
+  if (/前後|對比|before|after|改造/.test(text)) {
+    return "前後對比型";
+  }
+  if (/痛點|救星|忽略|踩雷|問題|亂/.test(text)) {
+    return "痛點切入型";
+  }
+  if (/怎麼|如何|教你|攻略|技巧/.test(text)) {
+    return "教學解法型";
+  }
+  if (/清單|盤點|推薦|top|名單/.test(text.toLowerCase())) {
+    return "清單推薦型";
+  }
+  return "情境靈感型";
+}
+
+function deriveTopicTraits(post) {
+  const tags = Array.isArray(post?.triggerTags) ? post.triggerTags.filter(Boolean) : [];
+  if (tags.length > 0) {
+    return tags.slice(0, 2);
+  }
+  const title = String(post?.title || "").trim();
+  if (!title) {
+    return ["未標記主題"];
+  }
+  const segments = title
+    .split(/[：:｜|／/、\-]+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  return segments.slice(0, 2).length > 0 ? segments.slice(0, 2) : [title.slice(0, 12)];
+}
+
+function summarizeTraitPerformance(posts, pickValues, baselineCtr) {
+  const traitMap = new Map();
+  posts.forEach((post) => {
+    const values = [...new Set((pickValues(post) || []).map((value) => String(value || "").trim()).filter(Boolean))];
+    values.forEach((value) => {
+      const current = traitMap.get(value) || { key: value, postCount: 0, reachSum: 0, clicksSum: 0, rawCtrTotal: 0, scoreTotal: 0 };
+      current.postCount += 1;
+      current.reachSum += Number(post?.metrics?.reach || 0);
+      current.clicksSum += Number(post?.metrics?.clicks || 0);
+      current.rawCtrTotal += getPostRawCtr(post);
+      current.scoreTotal += getPostSmoothedCtr(post);
+      traitMap.set(value, current);
+    });
+  });
+  return [...traitMap.values()]
+    .map((item) => ({
+      ...item,
+      ctr: item.reachSum > 0 ? item.clicksSum / item.reachSum : 0,
+      avgCtr: item.postCount > 0 ? item.rawCtrTotal / item.postCount : 0,
+      avgScore: item.postCount > 0 ? item.scoreTotal / item.postCount : 0,
+      deltaVsBaseline: (item.reachSum > 0 ? item.clicksSum / item.reachSum : 0) - baselineCtr
+    }))
+    .filter((item) => item.postCount >= 1 && item.reachSum >= getCtrLearningMinReach())
+    .sort((a, b) => {
+      if (b.avgScore !== a.avgScore) {
+        return b.avgScore - a.avgScore;
+      }
+      if (b.reachSum !== a.reachSum) {
+        return b.reachSum - a.reachSum;
+      }
+      return b.postCount - a.postCount;
+    });
+}
+
+function buildCtrLearningPacket(posts = []) {
+  const publishedPosts = posts.filter((post) => post?.status === "已發佈");
+  const eligiblePosts = publishedPosts.filter((post) => Number(post?.metrics?.reach || 0) >= getCtrLearningMinReach());
+  const postsForAnalysis = eligiblePosts.length >= 2 ? eligiblePosts : publishedPosts.filter((post) => Number(post?.metrics?.reach || 0) > 0);
+  const directionalOnly = eligiblePosts.length < 2;
+  if (postsForAnalysis.length === 0) {
+    return {
+      hasData: false,
+      directionalOnly: true,
+      baselineCtr: 0,
+      rankedPosts: [],
+      topTopics: [],
+      topOpeners: [],
+      topCtas: [],
+      topFormats: [],
+      winningTraits: [],
+      winnerRecipe: null,
+      nextRecommendations: [],
+      note: "目前已發佈貼文的點擊資料還不足，先累積幾篇有觸及與點擊的貼文後，這裡會開始教你複製高 CTR 結構。"
+    };
+  }
+  const totalReach = postsForAnalysis.reduce((sum, post) => sum + Number(post?.metrics?.reach || 0), 0);
+  const totalClicks = postsForAnalysis.reduce((sum, post) => sum + Number(post?.metrics?.clicks || 0), 0);
+  const baselineCtr = totalReach > 0 ? totalClicks / totalReach : 0;
+  const rankedPosts = postsForAnalysis
+    .map((post) => ({
+      post,
+      rawCtr: getPostRawCtr(post),
+      smoothedCtr: getPostSmoothedCtr(post),
+      titleStyle: classifyTitleStyle(post?.title),
+      ctaBucket: classifyCtaBucket(post?.cta),
+      topicTraits: deriveTopicTraits(post)
+    }))
+    .sort((a, b) => {
+      if (b.smoothedCtr !== a.smoothedCtr) {
+        return b.smoothedCtr - a.smoothedCtr;
+      }
+      return Number(b.post?.metrics?.clicks || 0) - Number(a.post?.metrics?.clicks || 0);
+    });
+  const topicLeaderboard = summarizeTraitPerformance(postsForAnalysis, deriveTopicTraits, baselineCtr);
+  const openerLeaderboard = summarizeTraitPerformance(postsForAnalysis, (post) => [classifyTitleStyle(post?.title)], baselineCtr);
+  const ctaLeaderboard = summarizeTraitPerformance(postsForAnalysis, (post) => [classifyCtaBucket(post?.cta)], baselineCtr);
+  const formatLeaderboard = summarizeTraitPerformance(postsForAnalysis, (post) => [String(post?.type === "reels" ? "Reels" : post?.type === "story" ? "Story" : "Feed")], baselineCtr);
+  const triggerLeaderboard = summarizeTraitPerformance(postsForAnalysis, (post) => deriveTopicTraits(post), baselineCtr);
+  const winnerPost = rankedPosts[0] || null;
+  const winnerRecipe = winnerPost
+    ? {
+        titleStyle: openerLeaderboard[0]?.key || winnerPost.titleStyle,
+        ctaBucket: ctaLeaderboard[0]?.key || winnerPost.ctaBucket,
+        format: formatLeaderboard[0]?.key || (winnerPost.post?.type === "reels" ? "Reels" : "Feed"),
+        trigger: triggerLeaderboard[0]?.key || winnerPost.topicTraits[0] || "主題切角",
+        sampleTitle: winnerPost.post?.title || "",
+        reasons: [
+          `${formatLeaderboard[0]?.key || "這種格式"} 目前 CTR ${ratioText(formatLeaderboard[0]?.clicksSum || totalClicks, formatLeaderboard[0]?.reachSum || totalReach)}`,
+          `${ctaLeaderboard[0]?.key || "這種 CTA"} 比整體平均高 ${Math.max(0, (ctaLeaderboard[0]?.deltaVsBaseline || 0) * 100).toFixed(1)}%`
+        ]
+      }
+    : null;
+  const topTraits = [formatLeaderboard[0], openerLeaderboard[0], ctaLeaderboard[0], triggerLeaderboard[0]].filter(Boolean);
+  return {
+    hasData: true,
+    directionalOnly,
+    baselineCtr,
+    rankedPosts,
+    topTopics: topicLeaderboard.slice(0, 3),
+    topOpeners: openerLeaderboard.slice(0, 3),
+    topCtas: ctaLeaderboard.slice(0, 3),
+    topFormats: formatLeaderboard.slice(0, 3),
+    winningTraits: topTraits,
+    winnerRecipe,
+    nextRecommendations: [
+      winnerRecipe ? `下週先複製 ${winnerRecipe.format} × ${winnerRecipe.titleStyle} × ${winnerRecipe.ctaBucket}` : "先累積更多已發佈貼文資料",
+      triggerLeaderboard[0] ? `優先用「${triggerLeaderboard[0].key}」這類主題切角` : "優先保留明確 trigger tags",
+      ctaLeaderboard[0] ? `CTA 先延續「${ctaLeaderboard[0].key}」` : "CTA 先維持單一明確行動"
+    ].filter(Boolean),
+    note: directionalOnly
+      ? "目前樣本仍偏少，以下結論先當方向參考；累積更多已發佈貼文後，建議會更穩定。"
+      : "以下結論來自已發佈貼文的點擊 / 觸及表現，可直接拿來安排下一週內容。"
+  };
+}
+
 function normalizePost(post) {
   const safe = post || {};
   return {
@@ -1012,6 +1218,7 @@ function renderAll() {
   renderKpi();
   renderWeeklyProducts();
   renderWeeklyPlanOverview();
+  renderCtrLearningCenter();
   renderPostsTable();
   renderProductsTable();
   renderDmPostOptions();
@@ -1079,8 +1286,10 @@ function renderWeeklyPlanOverview() {
   const week = getPlanningWeekKey();
   const weeklyPosts = getFilteredPosts({ forceWeek: week });
   const weeklyLinkedProducts = getWeeklyLinkedProducts(week);
+  const strategyWeeklyPlan = buildExecutableWeeklyPlan(brandStrategyPlanState);
+  const ctrLearning = buildCtrLearningPacket(state.posts);
 
-  if (weeklyPosts.length === 0) {
+  if (weeklyPosts.length === 0 && strategyWeeklyPlan.length === 0) {
     refs.weeklyPlanOverview.innerHTML = '<article class="plan-card placeholder-card"><div class="placeholder-frame">✨ 點擊開始規劃本週靈感</div><h4>本週尚未規劃貼文</h4><p>先新增本週貼文與商品連結，系統就會自動生成 IG 方案總覽。</p></article>';
     renderBoardProgress(0, 0);
     return;
@@ -1120,17 +1329,45 @@ function renderWeeklyPlanOverview() {
     weeklyLinkedProducts.map(({ product }) => product.name || "未命名商品").join("、") || "尚未綁定商品";
   const paceText = `本週共 ${weeklyPosts.length} 篇（Reels ${reelsCount} / Feed ${feedCount}），已發佈 ${publishedCount}、待執行 ${pendingCount}`;
 
-  const scheduleItems = weeklyPosts
-    .slice(0, 5)
-    .map((post) => {
-      const postType = post.type === "reels" ? "Reels" : "Feed";
-      const product = findProductByLink(post.link);
-      const title = buildLinkedTitle(post, product);
-      return `<li><span class="plan-bullet">✨</span>${escapeHtml(post.date)}｜${escapeHtml(postType)}｜${escapeHtml(title)} <span class="plan-status-pill ${resolvePlanStatusClass(
-        post.status
-      )}">${escapeHtml(post.status)}</span></li>`;
-    })
+  const scheduleItems = (weeklyPosts.length > 0 ? weeklyPosts.slice(0, 5).map((post) => {
+    const postType = post.type === "reels" ? "Reels" : "Feed";
+    const product = findProductByLink(post.link);
+    const title = buildLinkedTitle(post, product);
+    return {
+      label: `${post.date}｜${postType}｜${title}`,
+      status: post.status,
+      meta: `CTA：${post.cta || "私訊我領完整規格"}`
+    };
+  }) : strategyWeeklyPlan.map((item, index) => ({
+    label: `Day ${index + 1}｜${item.format}｜${item.topic}`,
+    status: "建議先發",
+    meta: `目標：${item.targetMetric}｜CTA：${item.cta}`
+  })))
+    .map(
+      (item) => `<li><span class="plan-bullet">✨</span>${escapeHtml(item.label)} <span class="plan-status-pill ${resolvePlanStatusClass(
+        item.status
+      )}">${escapeHtml(item.status)}</span><div class="content-upgrade-meta">${escapeHtml(item.meta)}</div></li>`
+    )
     .join("");
+
+  const quickStartCards = strategyWeeklyPlan
+    .slice(0, 5)
+    .map(
+      (item, index) => `<article class="plan-card"><h4>Day ${index + 1}｜${escapeHtml(item.format)}</h4><p><strong>${escapeHtml(
+        item.topic
+      )}</strong></p><p>${escapeHtml(item.title)}</p><p><strong>目標指標：</strong>${escapeHtml(item.targetMetric)}</p><p><strong>建議 CTA：</strong>${escapeHtml(
+        item.cta
+      )}</p></article>`
+    )
+    .join("");
+
+  const learningCard = ctrLearning.winnerRecipe
+    ? `<article class="plan-card plan-highlight"><h4>下週建議優先複製</h4><p><strong>${escapeHtml(
+        ctrLearning.winnerRecipe.format
+      )}</strong> × ${escapeHtml(ctrLearning.winnerRecipe.titleStyle)} × ${escapeHtml(ctrLearning.winnerRecipe.ctaBucket)}</p><p><strong>建議主題：</strong>${escapeHtml(
+        ctrLearning.winnerRecipe.trigger
+      )}</p><p><strong>參考開頭：</strong>${escapeHtml(ctrLearning.winnerRecipe.sampleTitle || "沿用最近高 CTR 的開頭句型")}</p></article>`
+    : `<article class="plan-card"><h4>下週建議優先複製</h4><p>${escapeHtml(ctrLearning.note)}</p></article>`;
 
   refs.weeklyPlanOverview.innerHTML = `
     <article class="plan-card plan-highlight">
@@ -1143,15 +1380,17 @@ function renderWeeklyPlanOverview() {
       <p>以「${escapeHtml(topTriggers.join("／") || "痛點／價值／安心")}"為核心觸發，先破除疑慮，再給使用情境與價格帶。</p>
       <p><strong>主 CTA：</strong>${escapeHtml(primaryCta)}</p>
     </article>
+    ${learningCard}
     <article class="plan-card">
       <h4>本週執行清單</h4>
       <ul class="plan-checklist">
         ${scheduleItems || "<li>尚未排定本週貼文</li>"}
       </ul>
     </article>
+    ${quickStartCards}
   `;
 
-  renderBoardProgress(weeklyPosts.length, publishedCount);
+  renderBoardProgress(weeklyPosts.length > 0 ? weeklyPosts.length : strategyWeeklyPlan.length, publishedCount);
 }
 
 function renderBoardProgress(totalCount, publishedCount) {
@@ -1167,6 +1406,9 @@ function renderBoardProgress(totalCount, publishedCount) {
 
 function resolvePlanStatusClass(status) {
   const value = String(status || "").trim();
+  if (value === "建議先發") {
+    return "is-todo";
+  }
   if (value === "已發佈") {
     return "is-published";
   }
@@ -1423,6 +1665,11 @@ function renderBrandStrategyPanel() {
   const ctas = Array.isArray(plan.copyFramework?.ctaTemplates) ? plan.copyFramework.ctaTemplates : [];
   const prompts = Array.isArray(plan.imagePromptFramework?.prompts) ? plan.imagePromptFramework.prompts : [];
   const previewCells = buildBrandStrategyIgPreviewCells(plan);
+  const quickWinTopics = buildCtrTopicRecommendations(plan).slice(0, 3);
+  const quickWinTitles = buildCtrTitleRecommendations(plan).slice(0, 3);
+  const quickWinCoverHooks = buildCtrCoverHooks(plan).slice(0, 3);
+  const weeklyPlanItems = buildExecutableWeeklyPlan(plan).slice(0, 5);
+  const ctrLearning = buildCtrLearningPacket(state.posts);
 
   refs.brandStrategyOutput.innerHTML = `
     <div class="strategy-gallery brand-strategy-stack">
@@ -1461,6 +1708,72 @@ function renderBrandStrategyPanel() {
     </div>
 
     <div class="brand-insight-grid">
+      <article class="strategy-card insight-card">
+        <strong>🚀 先發這 3 個最值得點進來的題材</strong>
+        <ul class="content-upgrade-list insight-list">${quickWinTopics
+          .map(
+            (item) => `<li class="content-upgrade-item"><strong>${escapeHtml(item.topic)}</strong><div class="content-upgrade-meta">${escapeHtml(
+              item.reason
+            )}</div><div class="content-upgrade-meta">建議格式：${escapeHtml(item.format)}</div></li>`
+          )
+          .join("")}</ul>
+      </article>
+      <article class="strategy-card insight-card">
+        <strong>🧲 先用這 3 個高點擊標題 / 首句</strong>
+        <ul class="content-upgrade-list insight-list">${quickWinTitles
+          .map(
+            (item) => `<li class="content-upgrade-item"><strong>${escapeHtml(item.title)}</strong><div class="content-upgrade-meta">${escapeHtml(
+              item.why
+            )}</div></li>`
+          )
+          .join("")}</ul>
+      </article>
+      <article class="strategy-card insight-card">
+        <strong>🪝 封面鉤子直接照這 3 個做</strong>
+        <ul class="content-upgrade-list insight-list">${quickWinCoverHooks
+          .map(
+            (item) => `<li class="content-upgrade-item"><strong>${escapeHtml(item.hook)}</strong><div class="content-upgrade-meta">${escapeHtml(
+              item.tip
+            )}</div></li>`
+          )
+          .join("")}</ul>
+      </article>
+    </div>
+
+    <article class="strategy-card insight-card">
+      <div class="row-between"><strong>🗓️ 策略已轉成本週 5 篇可執行清單</strong><span class="content-upgrade-meta">先照這份做，就能開始測點閱率</span></div>
+      <ul class="content-upgrade-list insight-list">${weeklyPlanItems
+        .map(
+          (item, index) => `<li class="content-upgrade-item"><strong>Day ${index + 1}｜${escapeHtml(item.format)}｜${escapeHtml(
+            item.topic
+          )}</strong><div class="content-upgrade-meta">目標指標：${escapeHtml(item.targetMetric)}</div><div class="content-upgrade-meta">CTA：${escapeHtml(
+            item.cta
+          )}</div><div class="content-upgrade-meta">開頭：${escapeHtml(item.title)}</div></li>`
+        )
+        .join("")}</ul>
+    </article>
+
+    <article class="strategy-card insight-card">
+      <strong>📈 這個品牌最近最有效的是什麼？</strong>
+      ${ctrLearning.hasData
+        ? `<div class="insight-copy-block">你這個品牌最近最有效的是：${escapeHtml(
+            ctrLearning.topOpeners[0]?.key || "目前資料不足"
+          )}、${escapeHtml(ctrLearning.topTopics[0]?.key || "主題聚焦型")}、${escapeHtml(ctrLearning.topCtas[0]?.key || "明確 CTA")}</div>
+           <ul class="content-upgrade-list insight-list">
+             <li class="content-upgrade-item"><strong>下一週建議優先複製</strong><div class="content-upgrade-meta">${escapeHtml(
+               ctrLearning.nextRecommendations[0] || "延續目前高 CTR 結構"
+             )}</div></li>
+             <li class="content-upgrade-item"><strong>最穩定的格式</strong><div class="content-upgrade-meta">${escapeHtml(
+               ctrLearning.topFormats[0]?.key || "尚未判定"
+             )}｜CTR ${escapeHtml(ratioText(ctrLearning.topFormats[0]?.clicksSum || 0, ctrLearning.topFormats[0]?.reachSum || 0))}</div></li>
+             <li class="content-upgrade-item"><strong>學習提醒</strong><div class="content-upgrade-meta">${escapeHtml(
+               ctrLearning.note
+             )}</div></li>
+           </ul>`
+        : `<div class="content-upgrade-meta">${escapeHtml(ctrLearning.note)}</div>`}
+    </article>
+
+    <div class="brand-insight-grid">
       <article class="strategy-card insight-card"><strong>💡 演算法密技</strong><ul class="content-upgrade-list insight-list">${signals
       .map(
         (item) => `<li class="content-upgrade-item"><strong>✨ ${escapeHtml(item.name || "signal")}</strong><div class="content-upgrade-meta">${escapeHtml(
@@ -1486,6 +1799,154 @@ function renderBrandStrategyPanel() {
           .join("")}</ul>
       </article>
     </div>
+  `;
+}
+
+function getBrandStrategyPriorityProducts(limit = 3) {
+  const weeklyProducts = getWeeklyLinkedProducts(getPlanningWeekKey()).map(({ product }) => product);
+  const fallbackProducts = state.products;
+  return [...weeklyProducts, ...fallbackProducts].filter(Boolean).slice(0, limit);
+}
+
+function buildCtrTopicRecommendations(plan) {
+  const pillars = Array.isArray(plan?.contentPillars) ? plan.contentPillars : [];
+  const products = getBrandStrategyPriorityProducts(3);
+  const fallbackTopics = [
+    { name: "小空間放大術", why: "先用改造前後差異吸引用戶停下來。" },
+    { name: "預算內升級感", why: "價格明確的內容更容易帶出點擊與比較。" },
+    { name: "收納痛點破解", why: "痛點型主題最適合拿來先測 CTR。" }
+  ];
+  const cadence = plan?.weeklyCadence || {};
+  const formatPriority = [
+    { key: "reels", label: "Reels", count: Number(cadence.reels || 0) },
+    { key: "feed", label: "Feed", count: Number(cadence.feed || 0) },
+    { key: "story", label: "Story", count: Number(cadence.story || 0) }
+  ].sort((a, b) => b.count - a.count);
+  return Array.from({ length: 3 }, (_, index) => {
+    const pillar = pillars[index] || fallbackTopics[index];
+    const product = products[index % Math.max(products.length, 1)];
+    const primaryFormat = formatPriority[index % formatPriority.length]?.label || "Reels";
+    return {
+      topic: `${pillar?.name || `主題 ${index + 1}`} × ${product?.name || "主力商品"}`,
+      reason: pillar?.why || `${product?.name || "主力商品"} 有明確使用情境，適合先測試點擊意圖。`,
+      format: primaryFormat
+    };
+  });
+}
+
+function buildCtrTitleRecommendations(plan) {
+  const hooks = Array.isArray(plan?.copyFramework?.hookTemplates) ? plan.copyFramework.hookTemplates : [];
+  const topics = buildCtrTopicRecommendations(plan);
+  return topics.map((topic, index) => {
+    const hook = hooks[index] || "你可能一直忽略了這個小細節";
+    return {
+      title: `${hook}：${topic.topic}`,
+      why: `先用明確痛點 + 主題名稱，降低滑過機率，適合測 CTR。`
+    };
+  });
+}
+
+function buildCtrCoverHooks(plan) {
+  const prompts = Array.isArray(plan?.imagePromptFramework?.prompts) ? plan.imagePromptFramework.prompts : [];
+  const topics = buildCtrTopicRecommendations(plan);
+  return topics.map((topic, index) => {
+    const scenario = prompts[index]?.scenario || "前後對比 / 空間改造";
+    return {
+      hook: `${topic.topic.split(" × ")[0]}｜${scenario}`,
+      tip: `封面文字控制在 8-14 字，優先放痛點或結果。`
+    };
+  });
+}
+
+function buildExecutableWeeklyPlan(plan) {
+  if (!plan) {
+    return [];
+  }
+  const topics = buildCtrTopicRecommendations(plan);
+  const titles = buildCtrTitleRecommendations(plan);
+  const ctas = Array.isArray(plan?.copyFramework?.ctaTemplates) ? plan.copyFramework.ctaTemplates : [];
+  const cadence = plan?.weeklyCadence || {};
+  const formats = [
+    ...Array(Math.max(0, Number(cadence.reels || 0))).fill("Reels"),
+    ...Array(Math.max(0, Number(cadence.feed || 0))).fill("Feed"),
+    ...Array(Math.max(0, Number(cadence.story || 0))).fill("Story")
+  ];
+  const metricByFormat = {
+    Reels: "點擊率 ≥ 3.5%，3 秒停留率穩定上升",
+    Feed: "收藏率 ≥ 4%，點擊率 ≥ 2.5%",
+    Story: "貼紙點擊率 ≥ 1.8%，導流點擊持續成長"
+  };
+  const items = Array.from({ length: 5 }, (_, index) => {
+    const topic = topics[index % Math.max(topics.length, 1)] || { topic: `主題 ${index + 1}`, format: "Reels" };
+    const title = titles[index % Math.max(titles.length, 1)] || { title: `本週主題 ${index + 1}` };
+    const format = formats[index] || topic.format || (index < 2 ? "Reels" : index === 2 ? "Feed" : "Story");
+    return {
+      topic: topic.topic,
+      title: title.title,
+      format,
+      cta: ctas[index % Math.max(ctas.length, 1)] || "私訊我拿完整規格 / 價格表",
+      targetMetric: metricByFormat[format] || "點擊率持續成長"
+    };
+  });
+  return items;
+}
+
+function renderCtrLearningCenter() {
+  if (!refs.ctrLearningCenter) {
+    return;
+  }
+  const learning = buildCtrLearningPacket(state.posts);
+  if (!learning.hasData) {
+    refs.ctrLearningCenter.innerHTML = `<article class="plan-card ctr-learning-card ctr-learning-card--empty"><h4>先累積幾篇有點擊資料的貼文</h4><p>${escapeHtml(
+      learning.note
+    )}</p></article>`;
+    return;
+  }
+  const topPostsHtml = learning.rankedPosts
+    .slice(0, 3)
+    .map(
+      ({ post, rawCtr, titleStyle, ctaBucket }) => `<li class="content-upgrade-item"><strong>${escapeHtml(post.title || "未命名貼文")}</strong><div class="content-upgrade-meta">${escapeHtml(
+        post.type === "reels" ? "Reels" : post.type === "story" ? "Story" : "Feed"
+      )}｜CTR ${escapeHtml(ratioText(post.metrics?.clicks || 0, post.metrics?.reach || 0))}｜觸及 ${escapeHtml(
+        formatMetricCompact(post.metrics?.reach || 0)
+      )}</div><div class="content-upgrade-meta">開頭型：${escapeHtml(titleStyle)}｜CTA：${escapeHtml(ctaBucket)}</div></li>`
+    )
+    .join("");
+  const winningTraitsHtml = learning.winningTraits
+    .slice(0, 4)
+    .map(
+      (trait) => `<li class="content-upgrade-item"><strong>${escapeHtml(trait.key)}</strong><div class="content-upgrade-meta">${escapeHtml(
+        `${trait.postCount} 篇貼文｜CTR ${ratioText(trait.clicksSum || 0, trait.reachSum || 0)}`
+      )}</div></li>`
+    )
+    .join("");
+  const topicRanksHtml = learning.topTopics
+    .slice(0, 3)
+    .map(
+      (item) => `<li class="content-upgrade-item"><strong>${escapeHtml(item.key)}</strong><div class="content-upgrade-meta">CTR ${escapeHtml(
+        ratioText(item.clicksSum || 0, item.reachSum || 0)
+      )}｜樣本 ${escapeHtml(String(item.postCount || 0))} 篇</div></li>`
+    )
+    .join("");
+  refs.ctrLearningCenter.innerHTML = `
+    <article class="plan-card ctr-learning-card">
+      <h4>最近最容易被點進去的貼文</h4>
+      <ul class="content-upgrade-list insight-list">${topPostsHtml}</ul>
+    </article>
+    <article class="plan-card ctr-learning-card">
+      <h4>高表現貼文的共同特徵</h4>
+      <ul class="content-upgrade-list insight-list">${winningTraitsHtml}</ul>
+      <p class="content-upgrade-meta ctr-learning-note">${escapeHtml(learning.note)}</p>
+    </article>
+    <article class="plan-card ctr-learning-card">
+      <h4>下一篇該複製哪種結構？</h4>
+      <p><strong>${escapeHtml(learning.winnerRecipe?.format || "先累積更多資料")}</strong> × ${escapeHtml(
+    learning.winnerRecipe?.titleStyle || "明確開頭"
+  )} × ${escapeHtml(learning.winnerRecipe?.ctaBucket || "明確 CTA")}</p>
+      <p><strong>建議主題：</strong>${escapeHtml(learning.winnerRecipe?.trigger || "先複製目前最常被點的主題")}</p>
+      <p><strong>參考標題：</strong>${escapeHtml(learning.winnerRecipe?.sampleTitle || "沿用高 CTR 開頭句型")}</p>
+      <ul class="content-upgrade-list insight-list">${topicRanksHtml}</ul>
+    </article>
   `;
 }
 
@@ -1612,6 +2073,30 @@ function saveOnboardingProgress(progress) {
   sessionStorage.setItem(ONBOARDING_PROGRESS_STORAGE_KEY, JSON.stringify(progress));
 }
 
+function loadOnboardingViewMode() {
+  try {
+    const raw = localStorage.getItem(ONBOARDING_VIEW_MODE_STORAGE_KEY);
+    return raw === "full" ? "full" : "guided";
+  } catch (_error) {
+    return "guided";
+  }
+}
+
+function saveOnboardingViewMode(mode) {
+  localStorage.setItem(ONBOARDING_VIEW_MODE_STORAGE_KEY, mode === "full" ? "full" : "guided");
+}
+
+function isFullControlModeEnabled() {
+  return loadOnboardingViewMode() === "full";
+}
+
+function toggleOnboardingViewMode() {
+  const nextMode = isFullControlModeEnabled() ? "guided" : "full";
+  saveOnboardingViewMode(nextMode);
+  renderOnboardingExperience();
+  renderAll();
+}
+
 function hasCompletedBrandProfileForOnboarding() {
   const requiredValues = [
     refs.brandStrategyBrandName?.value,
@@ -1663,6 +2148,10 @@ function isOnboardingStepAccessible(stepKey, progress = syncOnboardingProgressFr
 }
 
 function handleProtectedOnboardingAction(stepKey, onAllowed) {
+  if (isFullControlModeEnabled()) {
+    onAllowed();
+    return true;
+  }
   const progress = syncOnboardingProgressFromCurrentState();
   if (!isOnboardingStepAccessible(stepKey, progress)) {
     const currentStep = ONBOARDING_STEPS[getCurrentOnboardingStep(progress)];
@@ -1680,34 +2169,65 @@ function renderOnboardingExperience() {
   const currentIndex = getCurrentOnboardingStep(progress);
   const currentStep = ONBOARDING_STEPS[currentIndex];
   const completedAll = ONBOARDING_STEPS.every((step) => progress[step.key]);
+  const fullMode = !completedAll && isFullControlModeEnabled();
 
   if (refs.onboardingProgressPill) {
-    refs.onboardingProgressPill.textContent = completedAll ? "已完成 onboarding" : `Step ${currentIndex + 1} / ${ONBOARDING_STEPS.length}`;
+    refs.onboardingProgressPill.textContent = completedAll ? "已完成 onboarding" : fullMode ? "完整營運模式" : `Step ${currentIndex + 1} / ${ONBOARDING_STEPS.length}`;
+  }
+  if (refs.onboardingModeToggleBtn) {
+    refs.onboardingModeToggleBtn.hidden = completedAll;
+    refs.onboardingModeToggleBtn.textContent = fullMode ? "回到首次設定" : "查看完整功能";
+  }
+  if (refs.onboardingModeNote) {
+    refs.onboardingModeNote.textContent = completedAll
+      ? "你已完成品牌首次設定，現在已解鎖全部控制台。"
+      : fullMode
+        ? "你現在正在查看完整營運模式；隨時可以切回首次設定流程。"
+        : "你現在看到的是品牌首次設定頁，完成設定後解鎖全部控制台。";
   }
   if (refs.onboardingFocusKicker) {
-    refs.onboardingFocusKicker.textContent = completedAll ? "Ready" : `Step ${currentIndex + 1}`;
+    refs.onboardingFocusKicker.textContent = completedAll ? "Ready" : fullMode ? "完整功能" : `Step ${currentIndex + 1}`;
   }
   if (refs.onboardingFocusTitle) {
-    refs.onboardingFocusTitle.textContent = completedAll ? "你已經可以開始完整營運" : currentStep.title;
+    refs.onboardingFocusTitle.textContent = completedAll
+      ? "你已經可以開始完整營運"
+      : fullMode
+        ? "你正在查看完整營運控制台"
+        : currentStep.title;
   }
   if (refs.onboardingFocusBody) {
     refs.onboardingFocusBody.textContent = completedAll
       ? "品牌、商品與策略都已就位，現在可以直接進入貼文管理、DM 與週報工作流。"
-      : currentStep.body;
+      : fullMode
+        ? "目前已先打開完整功能給你總覽；你仍可隨時切回首次設定流程，照 5 步完成品牌初始化。"
+        : currentStep.body;
   }
   if (refs.heroSubtitle) {
     refs.heroSubtitle.textContent = completedAll
       ? "你已完成第一輪設定，現在可直接進入完整營運控制台。"
-      : "先跟著 5 步流程完成第一輪設定，再進入完整營運控制台。";
+      : fullMode
+        ? "你現在正在查看完整營運模式，也可以回到首次設定流程。"
+        : "先跟著 5 步流程完成第一輪設定，再進入完整營運控制台。";
   }
   renderOnboardingStepper(progress, currentIndex, completedAll);
-  renderOnboardingActions(currentStep, completedAll);
-  renderProtectedActionButtons(progress, completedAll);
-  toggleOnboardingPanels(progress, completedAll);
-  document.body.classList.toggle("is-onboarding-active", !completedAll);
+  renderOnboardingActions(currentStep, completedAll, fullMode);
+  renderProtectedActionButtons(progress, completedAll, fullMode);
+  toggleOnboardingPanels(progress, completedAll, fullMode);
+  document.body.classList.toggle("is-onboarding-active", !completedAll && !fullMode);
 }
 
-function renderProtectedActionButtons(progress, completedAll) {
+function renderProtectedActionButtons(progress, completedAll, fullMode = false) {
+  if (fullMode) {
+    if (refs.addProductBtn) {
+      refs.addProductBtn.disabled = false;
+      refs.addProductBtn.setAttribute("aria-disabled", "false");
+    }
+    if (refs.addPostBtn) {
+      refs.addPostBtn.disabled = false;
+      refs.addPostBtn.setAttribute("aria-disabled", "false");
+    }
+    return;
+  }
   const productUnlocked = completedAll || isOnboardingStepAccessible("products", progress);
   const planUnlocked = completedAll || isOnboardingStepAccessible("plan", progress);
   if (refs.addProductBtn) {
@@ -1743,7 +2263,7 @@ function renderOnboardingStepper(progress, currentIndex, completedAll) {
   });
 }
 
-function renderOnboardingActions(currentStep, completedAll) {
+function renderOnboardingActions(currentStep, completedAll, fullMode = false) {
   if (!refs.onboardingFocusActions) {
     return;
   }
@@ -1752,6 +2272,11 @@ function renderOnboardingActions(currentStep, completedAll) {
       <button class="btn btn-primary" type="button" data-onboarding-action="plan">開始貼文規劃</button>
       <button class="btn btn-secondary" type="button" data-onboarding-action="products">查看商品列表</button>
     `
+    : fullMode
+      ? `
+        <button class="btn btn-primary" type="button" data-onboarding-action="plan">進入貼文規劃牆</button>
+        <button class="btn btn-secondary" type="button" data-onboarding-action="brand">回到品牌首次設定</button>
+      `
     : `<button class="btn btn-primary" type="button" data-onboarding-action="${currentStep.key}">${currentStep.actionLabel}</button>`;
   refs.onboardingFocusActions.innerHTML = actionHtml;
   refs.onboardingFocusActions.querySelectorAll("[data-onboarding-action]").forEach((button) => {
@@ -1759,7 +2284,7 @@ function renderOnboardingActions(currentStep, completedAll) {
   });
 }
 
-function toggleOnboardingPanels(progress, completedAll) {
+function toggleOnboardingPanels(progress, completedAll, fullMode = false) {
   const stepOrder = { brand: 1, products: 2, plan: 4, posts: 4 };
   const currentIndex = getCurrentOnboardingStep(progress);
   document.querySelectorAll("[data-onboarding-panel]").forEach((panel) => {
@@ -1767,14 +2292,43 @@ function toggleOnboardingPanels(progress, completedAll) {
     const panelIndex = Number(stepOrder[key] ?? ONBOARDING_STEPS.length - 1);
     const unlocked = completedAll || panelIndex <= currentIndex + 1;
     panel.classList.toggle("is-step-locked", !unlocked);
-    panel.hidden = !completedAll && !unlocked && key !== "brand";
+    panel.hidden = !completedAll && !fullMode && !unlocked && key !== "brand";
   });
   document.querySelectorAll("[data-advanced-panel]").forEach((panel) => {
-    panel.hidden = !completedAll;
+    panel.hidden = !completedAll && !fullMode;
   });
 }
 
 function navigateOnboardingStep(stepKey) {
+  if (isFullControlModeEnabled()) {
+    if (stepKey === "auth") {
+      refs.authEmail?.focus();
+      refs.authEmail?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (stepKey === "brand") {
+      refs.brandStrategyPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+      refs.brandStrategyBrandName?.focus();
+      return;
+    }
+    if (stepKey === "products") {
+      openCreateProductDialog();
+      return;
+    }
+    if (stepKey === "strategy") {
+      refs.brandStrategyPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+      refs.brandStrategyGenerateBtn?.focus();
+      return;
+    }
+    if (stepKey === "plan") {
+      const planningWallPanel = document.getElementById("planning-wall-panel");
+      if (!planningWallPanel) {
+        return;
+      }
+      planningWallPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+  }
   const progress = syncOnboardingProgressFromCurrentState();
   if (!isOnboardingStepAccessible(stepKey, progress)) {
     const currentStep = ONBOARDING_STEPS[getCurrentOnboardingStep(progress)];

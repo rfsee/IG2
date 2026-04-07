@@ -9,7 +9,7 @@
       content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; connect-src 'self' https://ig2-backend.onrender.com; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     />
     <title>IG Growth OS（電商店家版）</title>
-    <link rel="stylesheet" href="styles.css?v=20260331w" />
+    <link rel="stylesheet" href="styles.css?v=20260406y" />
   </head>
   <body>
     <header class="hero">
@@ -24,8 +24,12 @@
               <h2 id="onboarding-title">5 步完成你的第一套 IG 行銷方案</h2>
               <p class="subtitle" id="onboarding-subtitle">先登入，再建立品牌與商品，最後自動進入貼文規劃牆。</p>
             </div>
-            <span class="onboarding-progress-pill" id="onboarding-progress-pill">Step 1 / 5</span>
+            <div class="onboarding-shell__status">
+              <span class="onboarding-progress-pill" id="onboarding-progress-pill">Step 1 / 5</span>
+              <button class="btn btn-secondary" id="onboarding-mode-toggle-btn" type="button">查看完整功能</button>
+            </div>
           </div>
+          <p class="onboarding-mode-note" id="onboarding-mode-note">你現在看到的是品牌首次設定頁，完成設定後解鎖全部控制台。</p>
           <div class="onboarding-stepper" id="onboarding-stepper"></div>
           <div class="onboarding-focus-card" id="onboarding-focus-card">
             <div class="onboarding-focus-copy">
@@ -140,6 +144,10 @@
           <h3>本週 IG 行銷方案總覽</h3>
         </div>
         <div class="weekly-plan-overview" id="weekly-plan-overview"></div>
+        <div class="panel-head">
+          <h3>點閱率學習中心</h3>
+        </div>
+        <div class="weekly-plan-overview ctr-learning-center" id="ctr-learning-center"></div>
       </section>
 
       <section class="panel onboarding-panel" id="posts-panel" data-onboarding-panel="posts">
@@ -373,6 +381,6 @@
     </dialog>
 
     <script src="config.js?v=20260406a"></script>
-    <script src="app.js?v=20260406a"></script>
+    <script src="app.js?v=20260406g"></script>
   </body>
 </html>

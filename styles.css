@@ -178,6 +178,41 @@ textarea {
   margin-top: 12px;
 }
 
+.onboarding-shell__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.onboarding-mode-note {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid #f1dfcf;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--cta);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.ctr-learning-center {
+  margin-top: 6px;
+}
+
+.ctr-learning-card {
+  min-height: 100%;
+}
+
+.ctr-learning-card--empty {
+  grid-column: 1 / -1;
+}
+
+.ctr-learning-note {
+  margin-top: 10px;
+}
+
 .strategy-card {
   border: 1px solid #f2dfcf;
   border-radius: 20px;
