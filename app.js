@@ -163,6 +163,8 @@ const refs = {
   restoreStateBtn: document.getElementById("restore-state-btn"),
   exportPostsBtn: document.getElementById("export-posts-btn"),
   exportProductsBtn: document.getElementById("export-products-btn"),
+  downloadPostsTemplateBtn: document.getElementById("download-posts-template-btn"),
+  downloadProductsTemplateBtn: document.getElementById("download-products-template-btn"),
   importPostsInput: document.getElementById("import-posts"),
   importProductsInput: document.getElementById("import-products"),
   generatePostDraftsBtn: document.getElementById("generate-post-drafts-btn"),
@@ -373,6 +375,13 @@ function bindEvents() {
 
   refs.exportPostsBtn.addEventListener("click", () => exportPostsCsv(state.posts));
   refs.exportProductsBtn.addEventListener("click", () => exportProductsCsv(state.products));
+
+  if (refs.downloadPostsTemplateBtn) {
+    refs.downloadPostsTemplateBtn.addEventListener("click", downloadPostsTemplate);
+  }
+  if (refs.downloadProductsTemplateBtn) {
+    refs.downloadProductsTemplateBtn.addEventListener("click", downloadProductsTemplate);
+  }
 
   refs.importPostsInput.addEventListener("change", async (event) => {
     const file = event.target.files && event.target.files[0];
@@ -4134,6 +4143,20 @@ function exportProductsCsv(products) {
   ]);
   const csv = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
   downloadCsv("products_export.csv", csv);
+}
+
+function downloadPostsTemplate() {
+  const headers = ["date", "type", "week", "status", "title", "script", "cta", "link", "trigger_tags", "reach", "saves", "dms", "clicks", "orders"];
+  const example = ["03/10", "reels", "W1", "草稿", "範例貼文標題", "Hook -> 展示 -> CTA", "留言關鍵字", "https://shopee.tw/product/...", "痛點, 證據", "", "", "", "", ""];
+  const csv = [headers.join(","), example.join(",")].join("\n");
+  downloadCsv("posts_template.csv", csv);
+}
+
+function downloadProductsTemplate() {
+  const headers = ["id", "name", "price", "size", "material", "selling", "photo_name", "link", "scene"];
+  const example = ["", "範例商品", "1999", "40x40cm", "實木", "小坪數萬用邊几", "", "https://shopee.tw/product/...", "客廳/臥室"];
+  const csv = [headers.join(","), example.join(",")].join("\n");
+  downloadCsv("products_template.csv", csv);
 }
 
 function importPostsCsv(csvText) {
