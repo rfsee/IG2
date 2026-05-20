@@ -122,6 +122,7 @@ const productCoverLookupInFlight = new Set();
 const productCoverLookupRetryAt = new Map();
 let brandStrategyIntakeState = null;
 let brandStrategyPlanState = null;
+let _pendingProductImportText = "";
 
 const refs = {
   onboardingShell: document.getElementById("onboarding-shell"),
@@ -396,17 +397,16 @@ function bindEvents() {
   refs.importProductsInput.addEventListener("change", async (event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) {
+      alert("DEBUG: 沒有選到檔案");
       return;
     }
+    alert("DEBUG: 選到檔案 " + file.name + " (" + file.size + " bytes)");
     const text = await file.text();
+    alert("DEBUG: 讀取完畢，長度=" + text.length + "，前50字=" + text.substring(0, 50));
     const preview = previewProductsCsv(text);
+    alert("DEBUG: 解析完成，valid=" + preview.valid + " total=" + preview.total);
     renderProductImportPreview(preview);
-    if (preview.valid) {
-      const confirmed = confirm(`即將匯入 ${preview.total} 項商品，是否繼續？`);
-      if (confirmed) {
-        withAutoBackup("before_import_products", () => applyProductImportPreview(text));
-      }
-    }
+    _pendingProductImportText = preview.valid ? text : "";
     refs.importProductsInput.value = "";
   });
 
@@ -424,14 +424,41 @@ function bindEvents() {
     });
   }
 
+  // 確認匯入按鈕 - 直接從預覽快取匯入
   if (refs.importPreviewConfirmBtn) {
     refs.importPreviewConfirmBtn.addEventListener("click", () => {
-      hideProductImportPreview();
+      alert("DEBUG: 按鈕被點擊了，_pendingProductImportText=" + (_pendingProductImportText ? "有資料" : "空的"));
+      if (_pendingProductImportText) {
+        try {
+          withAutoBackup("before_import_products", () => applyProductImportPreview(_pendingProductImportText));
+        } catch (e) {
+          alert("❌ 錯誤：" + e.message);
+          return;
+        }
+        _pendingProductImportText = "";
+        hideProductImportPreview();
+        alert(`✅ 成功匯入 ${state.products.length} 項商品`);
+      } else {
+        alert("⚠️ 請先選取 CSV 檔案");
+        hideProductImportPreview();
+      }
+    });
+  }
+
+  // 測試用 - 直接新增2筆測試商品
+  const debugBtn = document.getElementById("debug-import-btn");
+  if (debugBtn) {
+    debugBtn.addEventListener("click", () => {
+      state.products = [{ id: "test1", name: "測試商品 A", price: 999, size: "40x40cm", material: "實木", selling: "小坪數", photoName: "", link: "", scene: "客廳" }, { id: "test2", name: "測試商品 B", price: 1999, size: "60x60cm", material: "鐵", selling: "工業風", photoName: "", link: "", scene: "書房" }];
+      saveState();
+      renderAll();
+      alert(`✅ 新增 ${state.products.length} 項測試商品`);
     });
   }
 
   if (refs.importPreviewCancelBtn) {
     refs.importPreviewCancelBtn.addEventListener("click", () => {
+      _pendingProductImportText = "";
       hideProductImportPreview();
       refs.importProductsInput.value = "";
     });
