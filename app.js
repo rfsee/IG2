@@ -3192,7 +3192,7 @@ function buildLinkedTitle(post, product) {
   if (!product) {
     return base;
   }
-  const name = String(product.name || "").trim();
+  const name = extractShortProductName(product.name);
   if (!name) {
     return base;
   }
@@ -4426,6 +4426,115 @@ function applyProductImportPreview(csvText) {
   alert("DEBUG apply: done, state.products=" + state.products.length + " valid=" + state.products.filter(p => p && p.name).length);
 }
 
+function extractShortProductName(name) {
+  if (!name) return "";
+  let text = name.replace(/白日夢想家具店|白日夢想|DayDream/g, "").trim();
+  const parts = text.split(/[\s　]/).filter(Boolean);
+  if (parts.length === 0) return "";
+  const short = parts.slice(0, 2).join("");
+  return short.length <= 12 ? short : short.substring(0, 11) + "…";
+}
+
+function composeHook(product, tags, brandHooks, index) {
+  const shortName = extractShortProductName(product.name);
+  if (brandHooks.length > 0) {
+    const template = brandHooks[index % brandHooks.length];
+    return template.includes("{商品}") || template.includes("{product}")
+      ? template.replace(/\{商品\}|\{product\}/g, shortName || "商品")
+      : shortName ? `${shortName}｜${template}` : template;
+  }
+  if (!shortName) return brandHooks.length > 0 ? brandHooks[index % brandHooks.length] : "你的居家空間就缺這一件";
+  const tagsSet = new Set(tags);
+  const selling = String(product.selling || "").toLowerCase();
+  if (selling.includes("滑輪")) {
+    return `一張${shortName}全屋滑著走，移動座位首選`;
+  }
+  if (tagsSet.has("收納機能")) {
+    return `藏了３倍空間！這張${shortName}根本收納神器`;
+  }
+  if (tagsSet.has("改造風格")) {
+    return `改造前後差超多！關鍵就在這張${shortName}`;
+  }
+  const material = String(product.material || "").toLowerCase();
+  if (material.includes("實木") || material.includes("原木")) {
+    return `實木控淪陷！這張${shortName}質感拉滿`;
+  }
+  if (material.includes("絨") || material.includes("羊羔絨")) {
+    return `絨毛控必收！坐過${shortName}就回不去了`;
+  }
+  const scene = String(product.scene || "").toLowerCase();
+  if (tagsSet.has("小坪數")) {
+    const label = scene.includes("臥") ? "臥室" : scene.includes("客") ? "客廳" : "小空間";
+    return `${label}救星！一張${shortName}不佔位超實用`;
+  }
+  const price = Number(product.price || 0);
+  if (price > 0 && price < 1500) {
+    return `千元有找！這張${shortName}顏值超高不傷荷包`;
+  }
+  const defaults = [
+    `沒想過${shortName}也能這麼美，小預算大升級`,
+    `為了這張${shortName}我換了整个房間風格`,
+    `粉絲狂問的${shortName}連結直接給你`,
+    `一見鍾情的${shortName}質感比照片更好`,
+    `${shortName}開箱！這質感對不起這個價格`,
+    `不藏了！我家${shortName}被問爆的連結在這裡`
+  ];
+  return defaults[index % defaults.length];
+}
+
+function composeScript(product, tags, format, shortName) {
+  const selling = String(product.selling || "").toLowerCase();
+  const material = String(product.material || "").toLowerCase();
+  const size = String(product.size || "").toLowerCase();
+  const scene = String(product.scene || "").toLowerCase();
+  const sceneLabel = scene.includes("臥") ? "臥室" : scene.includes("客") ? "客廳" : (scene || "居家");
+  const price = Number(product.price || 0);
+  const tagsSet = new Set(tags);
+  if (format === "reels") {
+    const shots = [];
+    if (tagsSet.has("小坪數")) {
+      shots.push(`【Hook】小${sceneLabel}的真實樣貌⋯地板堆滿東西沒地方坐`);
+      shots.push(`【轉折】直到我拿出這張${shortName}`);
+    } else {
+      shots.push(`【Hook】你家${sceneLabel}是不是也少了這個？`);
+      shots.push(`【轉折】${shortName}直接讓空間升級`);
+    }
+    if (selling) shots.push(`【賣點】${selling}（特寫功能細節）`);
+    if (material) shots.push(`【材質】${material}質感近拍，手感Ｑ彈`);
+    if (size) shots.push(`【尺寸】${size}實際對比，剛剛好的比例`);
+    shots.push(`【場景】${shortName}在不同角度的搭配效果`);
+    const pt = price > 0 ? `只要 $${price.toLocaleString()}` : "超值價格";
+    shots.push(`【價格】${pt}，小資族無痛入手`);
+    shots.push(`【CTA】左下角連結傳送門｜留言「+1」拿完整規格`);
+    return shots.join(" -> ");
+  }
+  const slides = [];
+  slides.push(`Slide 1｜封面：${shortName} × ${sceneLabel}情境美圖`);
+  slides.push(`Slide 2｜${shortName}各角度產品全貌`);
+  const details = [selling, material, size].filter(Boolean);
+  slides.push(`Slide 3｜${details.length > 0 ? "細節：" + details.join("、") : "尺寸規格一覽（資訊圖卡）"}`);
+  const pt2 = price > 0 ? `$${price.toLocaleString()}` : "私訊報價";
+  slides.push(`Slide 4｜價格 ${pt2}｜傳送門在主頁`);
+  slides.push(`Slide 5｜留言「+1」小編私訊你連結`);
+  return slides.join(" -> ");
+}
+
+function composeCta(product, tags, brandCtas, index) {
+  if (brandCtas.length > 0) return brandCtas[index % brandCtas.length];
+  const price = Number(product.price || 0);
+  const tagsSet = new Set(tags);
+  if (price > 0 && price < 1000) return "千元有找！留言「+1」拿購買連結";
+  if (tagsSet.has("小坪數")) return "租屋族必看！留言「想看」領完整規格表";
+  if (tagsSet.has("收納機能")) return "私訊我拿收納前後對比圖＋尺寸表";
+  const defaults = [
+    "留言「想知道」小編私訊你連結",
+    "收藏這篇慢慢看，買的時候才找得到",
+    "私訊我拿完整尺寸與顏色選項",
+    "標記朋友來幫你選顏色"
+  ];
+  return defaults[index % defaults.length];
+}
+
 function generatePostDraftsFromProducts() {
   if (state.products.length === 0) {
     alert("請先匯入商品資料");
@@ -4433,27 +4542,28 @@ function generatePostDraftsFromProducts() {
   }
   const week = getPlanningWeekKey();
   const cadence = brandStrategyPlanState?.weeklyCadence || { reels: 3, feed: 2 };
-  const hooks = Array.isArray(brandStrategyPlanState?.copyFramework?.hookTemplates)
+  const brandHooks = Array.isArray(brandStrategyPlanState?.copyFramework?.hookTemplates)
     ? brandStrategyPlanState.copyFramework.hookTemplates
-    : ["Hook痛點", "實品展示", "尺寸對照"];
-  const ctas = Array.isArray(brandStrategyPlanState?.copyFramework?.ctaTemplates)
+    : [];
+  const brandCtas = Array.isArray(brandStrategyPlanState?.copyFramework?.ctaTemplates)
     ? brandStrategyPlanState.copyFramework.ctaTemplates
-    : ["私訊我拿完整規格", "收藏這篇", "留言問價格"];
+    : [];
   const selectedProducts = state.products.slice(0, Math.min(state.products.length, 5));
   const newPosts = selectedProducts.map((product, index) => {
     const format = index < cadence.reels ? "reels" : index < cadence.reels + cadence.feed ? "feed" : "reels";
-    const hook = hooks[index % hooks.length];
-    const cta = ctas[index % ctas.length];
     const tags = classifyProductTags(product);
-    const priceTag = tags.find((t) => t.includes("平價") || t.includes("中") || t.includes("高")) || "";
+    const shortName = extractShortProductName(product.name);
+    const hook = composeHook(product, tags, brandHooks, index);
+    const script = composeScript(product, tags, format, shortName);
+    const cta = composeCta(product, tags, brandCtas, index);
     return {
       id: createId("p"),
       date: formatDateForInput(new Date()),
       type: format,
       week: week,
       status: "草稿",
-      title: `${product.name || "商品貼文"}（${priceTag}）`,
-      script: `${hook} -> 商品展示 -> 尺寸/規格 -> CTA`,
+      title: hook,
+      script: script,
       cta: cta,
       link: product.link || "",
       triggerTags: tags.filter((t) => !["平價", "中價位", "中高價"].includes(t)),
