@@ -401,18 +401,14 @@ function bindEvents() {
     }
     try {
       const text = await file.text();
-      alert("DEBUG text前200字: " + text.substring(0, 200) + " 包含逗號: " + (text.indexOf(",") >= 0 ? "是" : "否") + " 逗號位置: " + text.indexOf(",") + " 第1字charCode: " + text.charCodeAt(0) + " 第4字(應該是逗號)charCode: " + text.charCodeAt(3));
-      // Test parseCsv on a simple string
-      const testResult = parseCsv("a,b,c\n1,2,3");
-      alert("DEBUG parseCsv測試: " + JSON.stringify(testResult));
-      const rows = parseCsv(text);
-      if (rows.length < 2) { alert("CSV 格式錯誤: 只有 " + rows.length + " 列"); return; }
-      const header = rows[0];
-      alert("DEBUG header: " + JSON.stringify(header) + " header長度: " + header.length);
+      // Use simple split method instead of parseCsv
+      const allLines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+      const header = allLines[0].split(",");
+      const dataRows = allLines.slice(1).map(line => line.split(","));
+      alert("新方法 header: " + JSON.stringify(header) + " (" + header.length + " 欄) 資料列: " + dataRows.length + " 第一列資料: " + JSON.stringify(dataRows[0] ? dataRows[0].slice(0,5) : "none"));
       const map = indexMap(header);
-      const dataRows = rows.slice(1).filter(r => r.some(c => String(c||"").trim().length > 0));
-      alert("DEBUG dataRows: " + dataRows.length + " 第一列: " + JSON.stringify(dataRows[0] ? dataRows[0].slice(0,5) : "none"));
-      const products = dataRows.map(row => ({
+      const validDataRows = dataRows.filter(r => r.some(c => String(c||"").trim().length > 0));
+      const products = validDataRows.map(row => ({
         id: pick(row, map, ["id"]) || createId("g"),
         name: pick(row, map, ["name", "商品", "商品名稱"]) || "",
         price: Number(pick(row, map, ["price", "價格"]) || 0),
@@ -424,9 +420,7 @@ function bindEvents() {
         scene: pick(row, map, ["scene", "場景建議", "場景"]) || ""
       }));
       if (products.length === 0) { alert("CSV 中沒有商品資料"); return; }
-      alert("DEBUG products: " + products.length + " 第一個 name=|" + products[0].name + "| price=" + products[0].price + " link=|" + products[0].link + "|");
-      // check column index 1 directly
-      alert("DEBUG row[1] 直接取值: |" + (dataRows[0]?.[1] || "空的") + "|");
+      alert("第一個商品 name=|" + products[0].name + "| price=" + products[0].price);
       if (confirm(`即將匯入 ${products.length} 項商品，是否繼續？`)) {
         withAutoBackup("before_import_products", () => {
           state.products = products;
@@ -434,7 +428,6 @@ function bindEvents() {
           saveState();
           renderAll();
         });
-        alert(`✅ 成功匯入 ${state.products.length} 項商品，有名稱的: ${state.products.filter(p => p.name).length} 項`);
       }
     } catch (e) {
       alert("❌ 匯入失敗：" + e.message);
