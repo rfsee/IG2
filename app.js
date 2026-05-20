@@ -166,6 +166,7 @@ const refs = {
   importPostsInput: document.getElementById("import-posts"),
   importProductsInput: document.getElementById("import-products"),
   generatePostDraftsBtn: document.getElementById("generate-post-drafts-btn"),
+  clearProductsBtn: document.getElementById("clear-products-btn"),
   importValidationBox: document.getElementById("import-validation-box"),
   importValidationTitle: document.getElementById("import-validation-title"),
   importValidationList: document.getElementById("import-validation-list"),
@@ -402,6 +403,16 @@ function bindEvents() {
 
   if (refs.generatePostDraftsBtn) {
     refs.generatePostDraftsBtn.addEventListener("click", generatePostDraftsFromProducts);
+  }
+
+  if (refs.clearProductsBtn) {
+    refs.clearProductsBtn.addEventListener("click", () => {
+      if (confirm("清除所有本機商品資料？僅影響本機儲存，不會刪除雲端資料。")) {
+        state.products = [];
+        saveState();
+        renderAll();
+      }
+    });
   }
 
   if (refs.importPreviewConfirmBtn) {
@@ -1261,7 +1272,8 @@ function renderKpi() {
   const totalPosts = state.posts.length;
   const publishedPosts = state.posts.filter((item) => item.status === "已發佈").length;
   const pendingPosts = state.posts.filter((item) => item.status !== "已發佈").length;
-  const totalProducts = state.products.length;
+  const validProducts = state.products.filter((p) => p && typeof p === "object" && p.name);
+  const totalProducts = validProducts.length;
   const totals = sumPostMetrics();
   const saveRate = ratioText(totals.saves, totals.reach);
   const dmRate = ratioText(totals.dms, totals.reach);
@@ -1556,7 +1568,8 @@ function renderPostsTable() {
 }
 
 function renderProductsTable() {
-  const rows = [...state.products].sort((a, b) => Number(a.price) - Number(b.price));
+  const safeProducts = state.products.filter((p) => p && typeof p === "object" && p.name);
+  const rows = [...safeProducts].sort((a, b) => Number(a.price) - Number(b.price));
   refs.productsTbody.innerHTML = rows
     .map((product) => {
       const imageSrc = resolveProductImageSrc(product);
@@ -1997,7 +2010,10 @@ async function syncProductsFromBackend() {
   try {
     const payload = await requestBrandStrategyApi("GET", "/api/products");
     if (Array.isArray(payload?.items) && payload.items.length > 0) {
-      state.products = payload.items.map(normalizeProduct);
+      const normalizedItems = payload.items.map(normalizeProduct);
+      const backendIds = new Set(normalizedItems.map((p) => p.id));
+      const localOnly = state.products.filter((p) => !p.id || !backendIds.has(p.id));
+      state.products = [...localOnly, ...normalizedItems];
       saveState();
       renderProductsTable();
     }
@@ -2009,7 +2025,10 @@ async function syncPostsFromBackend() {
   try {
     const payload = await requestBrandStrategyApi("GET", "/api/posts");
     if (Array.isArray(payload?.items) && payload.items.length > 0) {
-      state.posts = payload.items.map(normalizePost);
+      const normalizedItems = payload.items.map(normalizePost);
+      const existingIds = new Set(state.posts.map((p) => p.id));
+      const newItems = normalizedItems.filter((p) => !existingIds.has(p.id));
+      state.posts = [...state.posts, ...newItems];
       saveState();
       renderPostsTable();
       renderWeeklyPlanOverview();
