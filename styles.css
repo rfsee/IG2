@@ -87,6 +87,22 @@ dialog { border: 1px solid var(--line); border-radius: 12px; padding: 0; width: 
 .auto-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
 .auto-head strong { font-size: 0.84rem; color: var(--ink); }
 textarea { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: #fff; width: 100%; font: inherit; }
+.import-preview-box {
+  position: relative;
+  margin: 10px 0;
+  padding: 14px;
+  background: linear-gradient(135deg, #fffdf9 0%, #fff9f0 100%);
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(240, 141, 115, 0.1);
+}
+.import-preview-box strong { display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--ink); }
+.import-preview-box ul { list-style: none; margin: 0 0 10px; padding: 0; max-height: 240px; overflow-y: auto; }
+.import-preview-item { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 0.82rem; }
+.import-preview-item strong { display: inline; font-size: 0.82rem; color: var(--ink); margin: 0 6px 0 0; }
+.import-preview-meta { color: var(--muted); font-size: 0.78rem; }
+.import-preview-more { padding: 8px 0; color: var(--muted); font-size: 0.78rem; text-align: center; font-style: italic; }
+.import-preview-box .actions { margin-top: 10px; display: flex; gap: 8px; }
 @media (max-width: 780px) {
   .filters { flex-wrap: wrap; }
   .form-grid { grid-template-columns: 1fr; }

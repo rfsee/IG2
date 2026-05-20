@@ -9,7 +9,7 @@
       content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; connect-src 'self' https://ig2-backend.onrender.com; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     />
     <title>IG Growth OS（電商店家版）</title>
-    <link rel="stylesheet" href="styles.css?v=20260406y" />
+    <link rel="stylesheet" href="styles.css?v=20260407a" />
   </head>
   <body>
     <header class="hero">
@@ -82,11 +82,14 @@
             <button id="download-products-template-btn" class="btn btn-secondary" type="button">⬇ 下載商品模板</button>
             <label class="btn btn-secondary file-btn">📥 匯入貼文CSV<input id="import-posts" type="file" accept=".csv" hidden /></label>
             <label class="btn btn-secondary file-btn">📥 匯入商品CSV<input id="import-products" type="file" accept=".csv" hidden /></label>
+            <button id="generate-post-drafts-btn" class="btn btn-secondary" type="button">✨ 根據商品生成草稿</button>
           </div>
         </div>
-        <div class="import-validation-box" id="import-validation-box" hidden>
-          <strong id="import-validation-title">匯入檢查結果</strong>
+        <div class="import-preview-box" id="import-validation-box" hidden>
+          <strong id="import-validation-title">匯入預覽</strong>
           <ul id="import-validation-list"></ul>
+          <button id="import-preview-confirm-btn" class="btn btn-primary" type="button">確認匯入</button>
+          <button id="import-preview-cancel-btn" class="btn" type="button">取消</button>
         </div>
       </div>
     </header>
@@ -381,6 +384,6 @@
     </dialog>
 
     <script src="config.js?v=20260406a"></script>
-    <script src="app.js?v=20260406g"></script>
+    <script src="app.js?v=20260407b"></script>
   </body>
 </html>

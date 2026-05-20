@@ -165,6 +165,12 @@ const refs = {
   exportProductsBtn: document.getElementById("export-products-btn"),
   importPostsInput: document.getElementById("import-posts"),
   importProductsInput: document.getElementById("import-products"),
+  generatePostDraftsBtn: document.getElementById("generate-post-drafts-btn"),
+  importValidationBox: document.getElementById("import-validation-box"),
+  importValidationTitle: document.getElementById("import-validation-title"),
+  importValidationList: document.getElementById("import-validation-list"),
+  importPreviewConfirmBtn: document.getElementById("import-preview-confirm-btn"),
+  importPreviewCancelBtn: document.getElementById("import-preview-cancel-btn"),
   postId: document.getElementById("post-id"),
   postDate: document.getElementById("post-date"),
   postType: document.getElementById("post-type"),
@@ -383,9 +389,33 @@ function bindEvents() {
       return;
     }
     const text = await file.text();
-    withAutoBackup("before_import_products", () => importProductsCsv(text));
+    const preview = previewProductsCsv(text);
+    renderProductImportPreview(preview);
+    if (preview.valid) {
+      const confirmed = confirm(`即將匯入 ${preview.total} 項商品，是否繼續？`);
+      if (confirmed) {
+        withAutoBackup("before_import_products", () => applyProductImportPreview(text));
+      }
+    }
     refs.importProductsInput.value = "";
   });
+
+  if (refs.generatePostDraftsBtn) {
+    refs.generatePostDraftsBtn.addEventListener("click", generatePostDraftsFromProducts);
+  }
+
+  if (refs.importPreviewConfirmBtn) {
+    refs.importPreviewConfirmBtn.addEventListener("click", () => {
+      hideProductImportPreview();
+    });
+  }
+
+  if (refs.importPreviewCancelBtn) {
+    refs.importPreviewCancelBtn.addEventListener("click", () => {
+      hideProductImportPreview();
+      refs.importProductsInput.value = "";
+    });
+  }
 
   if (refs.brandStrategyRefreshBtn) {
     refs.brandStrategyRefreshBtn.addEventListener("click", async () => {
@@ -1963,6 +1993,50 @@ async function syncBrandStrategyFromBackend() {
   renderBrandStrategyPanel();
 }
 
+async function syncProductsFromBackend() {
+  try {
+    const payload = await requestBrandStrategyApi("GET", "/api/products");
+    if (Array.isArray(payload?.items) && payload.items.length > 0) {
+      state.products = payload.items.map(normalizeProduct);
+      saveState();
+      renderProductsTable();
+    }
+  } catch (_error) {
+  }
+}
+
+async function syncPostsFromBackend() {
+  try {
+    const payload = await requestBrandStrategyApi("GET", "/api/posts");
+    if (Array.isArray(payload?.items) && payload.items.length > 0) {
+      state.posts = payload.items.map(normalizePost);
+      saveState();
+      renderPostsTable();
+      renderWeeklyPlanOverview();
+      renderCtrLearningCenter();
+    }
+  } catch (_error) {
+  }
+}
+
+function normalizeProduct(raw) {
+  if (!raw || typeof raw !== "object") {
+    return { id: createId("g"), name: "", price: 0, size: "", material: "", selling: "", photoName: "", link: "", scene: "" };
+  }
+  const safe = raw || {};
+  return {
+    id: String(safe.id || createId("g")),
+    name: String(safe.name || ""),
+    price: Number(safe.price || 0),
+    size: String(safe.size || ""),
+    material: String(safe.material || ""),
+    selling: String(safe.selling || ""),
+    photoName: String(safe.photoName || safe.photo_name || ""),
+    link: String(safe.link || ""),
+    scene: String(safe.scene || "")
+  };
+}
+
 async function saveAndGenerateBrandStrategy() {
   if (!refs.brandStrategyBrandName) {
     return;
@@ -2528,13 +2602,13 @@ async function onAuthLogin() {
     markOnboardingStep("auth");
     renderOnboardingExperience();
     if (refs.brandStrategySummary) {
-      refs.brandStrategySummary.textContent = `已登入 ${session.activeTenantName || "目前店家"}，正在同步品牌策略。`;
+      refs.brandStrategySummary.textContent = `已登入 ${session.activeTenantName || "目前店家"}，正在同步資料。`;
     }
-    await syncBrandStrategyFromBackend().catch(() => {
-      if (refs.brandStrategySummary) {
-        refs.brandStrategySummary.textContent = "登入成功，但品牌策略同步失敗，請稍後重試。";
-      }
-    });
+    await Promise.all([
+      syncBrandStrategyFromBackend().catch(() => {}),
+      syncProductsFromBackend().catch(() => {}),
+      syncPostsFromBackend().catch(() => {})
+    ]);
     alert("登入成功。");
   } catch (error) {
     alert(`登入失敗：${String(error?.message || error)}`);
@@ -4117,6 +4191,189 @@ function importProductsCsv(csvText) {
   syncDraftTitlesWithProducts(false);
   saveState();
   renderAll();
+}
+
+function classifyProductTags(product) {
+  const price = Number(product?.price || 0);
+  const material = String(product?.material || "").toLowerCase();
+  const scene = String(product?.scene || "").toLowerCase();
+  const size = String(product?.size || "").toLowerCase();
+  const selling = String(product?.selling || "").toLowerCase();
+  const tags = [];
+  if (price > 0 && price < 2000) {
+    tags.push("平價");
+  } else if (price >= 2000 && price < 3500) {
+    tags.push("中價位");
+  } else if (price >= 3500) {
+    tags.push("中高價");
+  }
+  if (material.includes("實木") || material.includes("原木")) {
+    tags.push("實木");
+  } else if (material.includes("鐵")) {
+    tags.push("金屬");
+  } else if (material.includes("布") || material.includes("絨")) {
+    tags.push("布織");
+  } else if (material.includes("塑")) {
+    tags.push("塑膠");
+  }
+  if (scene.includes("床") || scene.includes("臥")) {
+    tags.push("臥室");
+  } else if (scene.includes("客") || scene.includes("廳")) {
+    tags.push("客廳");
+  } else if (scene.includes("餐")) {
+    tags.push("餐廳");
+  } else if (scene.includes("玄關") || scene.includes("門")) {
+    tags.push("玄關");
+  } else if (scene.includes("陽台") || scene.includes("露台")) {
+    tags.push("戶外");
+  }
+  if (size.includes("小") || size.includes("迷你")) {
+    tags.push("小坪數");
+  } else if (size.includes("大")) {
+    tags.push("大空間");
+  }
+  if (selling.includes("收納") || selling.includes("儲物")) {
+    tags.push("收納機能");
+  } else if (selling.includes("改造") || selling.includes("diy")) {
+    tags.push("改造風格");
+  }
+  return tags;
+}
+
+function previewProductsCsv(csvText) {
+  const rows = parseCsv(csvText);
+  if (rows.length < 2) {
+    return { valid: false, message: "CSV 檔案格式不正確或無資料" };
+  }
+  const header = rows[0];
+  const map = indexMap(header);
+  const previews = rows
+    .slice(1)
+    .filter((row) => row.some((cell) => String(cell || "").trim().length > 0))
+    .map((row) => {
+      const raw = {
+        name: pick(row, map, ["name", "商品", "商品名稱"]) || "(未填寫)",
+        price: Number(pick(row, map, ["price", "價格"]) || 0),
+        size: pick(row, map, ["size", "尺寸"]) || "",
+        material: pick(row, map, ["material", "材質/顏色", "材質"]) || "",
+        selling: pick(row, map, ["selling", "賣點"]) || "",
+        scene: pick(row, map, ["scene", "場景建議", "場景"]) || "",
+        link: pick(row, map, ["link", "商品連結", "連結"]) || ""
+      };
+      const tags = classifyProductTags(raw);
+      return { ...raw, tags, id: pick(row, map, ["id"]) || createId("g") };
+    });
+  if (previews.length === 0) {
+    return { valid: false, message: "找不到任何商品資料列" };
+  }
+  return { valid: true, items: previews, total: previews.length };
+}
+
+function renderProductImportPreview(previewData) {
+  if (!refs.importValidationBox) {
+    return;
+  }
+  if (!previewData.valid) {
+    refs.importValidationBox.hidden = false;
+    refs.importValidationTitle.textContent = "匯入錯誤";
+    refs.importValidationList.innerHTML = `<li>${escapeHtml(previewData.message)}</li>`;
+    return;
+  }
+  refs.importValidationBox.hidden = false;
+  refs.importValidationTitle.textContent = `即將匯入 ${previewData.total} 項商品`;
+  const itemsHtml = previewData.items.slice(0, 20).map((item) => {
+    const priceDisplay = item.price > 0 ? `$${item.price.toLocaleString()}` : "未填價格";
+    return `<li class="import-preview-item"><strong>${escapeHtml(item.name)}</strong><span class="import-preview-meta">${escapeHtml(priceDisplay)}｜${escapeHtml(item.tags.join(", ") || "未分類")}</span></li>`;
+  }).join("");
+  const moreNote = previewData.total > 20 ? `<li class="import-preview-more">...還有 ${previewData.total - 20} 項商品</li>` : "";
+  refs.importValidationList.innerHTML = itemsHtml + moreNote;
+}
+
+function hideProductImportPreview() {
+  if (refs.importValidationBox) {
+    refs.importValidationBox.hidden = true;
+  }
+}
+
+function applyProductImportPreview(csvText) {
+  const rows = parseCsv(csvText);
+  if (rows.length < 2) {
+    return;
+  }
+  const header = rows[0];
+  const map = indexMap(header);
+  const nextProducts = rows
+    .slice(1)
+    .filter((row) => row.some((cell) => String(cell || "").trim().length > 0))
+    .map((row) => {
+      return {
+        id: pick(row, map, ["id"]) || createId("g"),
+        name: pick(row, map, ["name", "商品", "商品名稱"]) || "",
+        price: Number(pick(row, map, ["price", "價格"]) || 0),
+        size: pick(row, map, ["size", "尺寸"]) || "",
+        material: pick(row, map, ["material", "材質/顏色", "材質"]) || "",
+        selling: pick(row, map, ["selling", "賣點"]) || "",
+        photoName: pick(row, map, ["photo_name", "photoName", "照片名稱", "主圖檔名"]) || "",
+        link:
+          toCanonicalShopeeLink(pick(row, map, ["link", "商品連結", "連結", "主圖"])) ||
+          pick(row, map, ["link", "商品連結", "連結", "主圖"]) ||
+          "",
+        scene: pick(row, map, ["scene", "場景建議", "場景"]) || ""
+      };
+    });
+  state.products = nextProducts;
+  syncDraftTitlesWithProducts(false);
+  saveState();
+  renderAll();
+}
+
+function generatePostDraftsFromProducts() {
+  if (state.products.length === 0) {
+    alert("請先匯入商品資料");
+    return;
+  }
+  const week = getPlanningWeekKey();
+  const cadence = brandStrategyPlanState?.weeklyCadence || { reels: 3, feed: 2 };
+  const hooks = Array.isArray(brandStrategyPlanState?.copyFramework?.hookTemplates)
+    ? brandStrategyPlanState.copyFramework.hookTemplates
+    : ["Hook痛點", "實品展示", "尺寸對照"];
+  const ctas = Array.isArray(brandStrategyPlanState?.copyFramework?.ctaTemplates)
+    ? brandStrategyPlanState.copyFramework.ctaTemplates
+    : ["私訊我拿完整規格", "收藏這篇", "留言問價格"];
+  const selectedProducts = state.products.slice(0, Math.min(state.products.length, 5));
+  const newPosts = selectedProducts.map((product, index) => {
+    const format = index < cadence.reels ? "reels" : index < cadence.reels + cadence.feed ? "feed" : "reels";
+    const hook = hooks[index % hooks.length];
+    const cta = ctas[index % ctas.length];
+    const tags = classifyProductTags(product);
+    const priceTag = tags.find((t) => t.includes("平價") || t.includes("中") || t.includes("高")) || "";
+    return {
+      id: createId("p"),
+      date: formatDateForInput(new Date()),
+      type: format,
+      week: week,
+      status: "草稿",
+      title: `${product.name || "商品貼文"}（${priceTag}）`,
+      script: `${hook} -> 商品展示 -> 尺寸/規格 -> CTA`,
+      cta: cta,
+      link: product.link || "",
+      triggerTags: tags.filter((t) => !["平價", "中價位", "中高價"].includes(t)),
+      metrics: { reach: 0, saves: 0, dms: 0, clicks: 0, orders: 0 }
+    };
+  });
+  withAutoBackup("before_generate_post_drafts", () => {
+    state.posts = [...newPosts, ...state.posts];
+    saveState();
+    renderAll();
+  });
+  alert(`已生成 ${newPosts.length} 篇貼文草稿，正在本週規劃牆頂部`);
+}
+
+function formatDateForInput(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${month}/${day}`;
 }
 
 function parseCsv(text) {
