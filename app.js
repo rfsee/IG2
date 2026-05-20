@@ -401,10 +401,14 @@ function bindEvents() {
     }
     try {
       const text = await file.text();
+      alert("DEBUG text前200字: " + text.substring(0, 200) + " 包含逗號: " + (text.indexOf(",") >= 0 ? "是" : "否") + " 逗號位置: " + text.indexOf(",") + " 第1字charCode: " + text.charCodeAt(0) + " 第4字(應該是逗號)charCode: " + text.charCodeAt(3));
+      // Test parseCsv on a simple string
+      const testResult = parseCsv("a,b,c\n1,2,3");
+      alert("DEBUG parseCsv測試: " + JSON.stringify(testResult));
       const rows = parseCsv(text);
       if (rows.length < 2) { alert("CSV 格式錯誤: 只有 " + rows.length + " 列"); return; }
       const header = rows[0];
-      alert("DEBUG header: " + JSON.stringify(header));
+      alert("DEBUG header: " + JSON.stringify(header) + " header長度: " + header.length);
       const map = indexMap(header);
       const dataRows = rows.slice(1).filter(r => r.some(c => String(c||"").trim().length > 0));
       alert("DEBUG dataRows: " + dataRows.length + " 第一列: " + JSON.stringify(dataRows[0] ? dataRows[0].slice(0,5) : "none"));
