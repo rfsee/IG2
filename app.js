@@ -397,16 +397,37 @@ function bindEvents() {
   refs.importProductsInput.addEventListener("change", async (event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) {
-      alert("DEBUG: 沒有選到檔案");
       return;
     }
-    alert("DEBUG: 選到檔案 " + file.name + " (" + file.size + " bytes)");
-    const text = await file.text();
-    alert("DEBUG: 讀取完畢，長度=" + text.length + "，前100字=" + text.substring(0, 100) + "，第1個字charCode=" + text.charCodeAt(0));
-    const preview = previewProductsCsv(text);
-    alert("DEBUG: 解析完成，valid=" + preview.valid + " total=" + preview.total + " 第一個商品名=" + (preview.items?.[0]?.name || "N/A"));
-    renderProductImportPreview(preview);
-    _pendingProductImportText = preview.valid ? text : "";
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length < 2) { alert("CSV 格式錯誤"); return; }
+      const map = indexMap(rows[0]);
+      const products = rows.slice(1).filter(r => r.some(c => String(c||"").trim().length > 0)).map(row => ({
+        id: pick(row, map, ["id"]) || createId("g"),
+        name: pick(row, map, ["name", "商品", "商品名稱"]) || "",
+        price: Number(pick(row, map, ["price", "價格"]) || 0),
+        size: pick(row, map, ["size", "尺寸"]) || "",
+        material: pick(row, map, ["material", "材質/顏色", "材質"]) || "",
+        selling: pick(row, map, ["selling", "賣點"]) || "",
+        photoName: pick(row, map, ["photo_name", "photoName", "照片名稱", "主圖檔名"]) || "",
+        link: toCanonicalShopeeLink(pick(row, map, ["link", "商品連結", "連結", "主圖"])) || pick(row, map, ["link", "商品連結", "連結", "主圖"]) || "",
+        scene: pick(row, map, ["scene", "場景建議", "場景"]) || ""
+      }));
+      if (products.length === 0) { alert("CSV 中沒有商品資料"); return; }
+      if (confirm(`即將匯入 ${products.length} 項商品，是否繼續？`)) {
+        withAutoBackup("before_import_products", () => {
+          state.products = products;
+          syncDraftTitlesWithProducts(false);
+          saveState();
+          renderAll();
+        });
+        alert(`✅ 成功匯入 ${state.products.length} 項商品`);
+      }
+    } catch (e) {
+      alert("❌ 匯入失敗：" + e.message);
+    }
     refs.importProductsInput.value = "";
   });
 
