@@ -402,9 +402,9 @@ function bindEvents() {
     }
     alert("DEBUG: 選到檔案 " + file.name + " (" + file.size + " bytes)");
     const text = await file.text();
-    alert("DEBUG: 讀取完畢，長度=" + text.length + "，前50字=" + text.substring(0, 50));
+    alert("DEBUG: 讀取完畢，長度=" + text.length + "，前100字=" + text.substring(0, 100) + "，第1個字charCode=" + text.charCodeAt(0));
     const preview = previewProductsCsv(text);
-    alert("DEBUG: 解析完成，valid=" + preview.valid + " total=" + preview.total);
+    alert("DEBUG: 解析完成，valid=" + preview.valid + " total=" + preview.total + " 第一個商品名=" + (preview.items?.[0]?.name || "N/A"));
     renderProductImportPreview(preview);
     _pendingProductImportText = preview.valid ? text : "";
     refs.importProductsInput.value = "";
@@ -4366,7 +4366,9 @@ function hideProductImportPreview() {
 
 function applyProductImportPreview(csvText) {
   const rows = parseCsv(csvText);
+  alert("DEBUG apply: rows=" + rows.length + " header=" + JSON.stringify(rows[0] ? rows[0].slice(0,5) : "none"));
   if (rows.length < 2) {
+    alert("DEBUG apply: rows < 2, return early");
     return;
   }
   const header = rows[0];
@@ -4375,7 +4377,7 @@ function applyProductImportPreview(csvText) {
     .slice(1)
     .filter((row) => row.some((cell) => String(cell || "").trim().length > 0))
     .map((row) => {
-      return {
+      const obj = {
         id: pick(row, map, ["id"]) || createId("g"),
         name: pick(row, map, ["name", "商品", "商品名稱"]) || "",
         price: Number(pick(row, map, ["price", "價格"]) || 0),
@@ -4389,11 +4391,14 @@ function applyProductImportPreview(csvText) {
           "",
         scene: pick(row, map, ["scene", "場景建議", "場景"]) || ""
       };
+      return obj;
     });
+  alert("DEBUG apply: nextProducts=" + nextProducts.length + " firstName=" + (nextProducts[0]?.name || "EMPTY") + " firstPrice=" + nextProducts[0]?.price);
   state.products = nextProducts;
   syncDraftTitlesWithProducts(false);
   saveState();
   renderAll();
+  alert("DEBUG apply: done, state.products=" + state.products.length + " valid=" + state.products.filter(p => p && p.name).length);
 }
 
 function generatePostDraftsFromProducts() {
