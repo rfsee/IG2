@@ -4493,40 +4493,64 @@ function composeHook(product, tags, brandHooks, index) {
   if (!shortName) return brandHooks.length > 0 ? brandHooks[index % brandHooks.length] : "你的居家空間就缺這一件";
   const tagsSet = new Set(tags);
   const selling = String(product.selling || "").toLowerCase();
-  if (selling.includes("滑輪")) {
-    return `一張${shortName}全屋滑著走，移動座位首選`;
+  const material = String(product.material || "").toLowerCase();
+  const scene = String(product.scene || "").toLowerCase();
+  const price = Number(product.price || 0);
+  const sceneLabel = scene.includes("臥") ? "臥室" : scene.includes("客") ? "客廳" : "";
+
+  const features = [];
+  const painPoints = [];
+
+  if (tagsSet.has("小坪數")) {
+    painPoints.push(`小${sceneLabel || "空間"}沒地方坐`);
+    features.push("不佔位好收納");
   }
-  if (tagsSet.has("收納機能")) {
-    return `藏了３倍空間！這張${shortName}根本收納神器`;
+  if (selling.includes("滑輪")) {
+    painPoints.push("椅子固定不能動");
+    features.push("附滑輪全屋推著走");
+  }
+  if (selling.includes("收納") || tagsSet.has("收納機能")) {
+    painPoints.push("東西多沒空間收");
+    features.push("內建收納省空間");
   }
   if (tagsSet.has("改造風格")) {
-    return `改造前後差超多！關鍵就在這張${shortName}`;
+    painPoints.push("空間風格單調");
+    features.push("改造風格立即升級");
   }
-  const material = String(product.material || "").toLowerCase();
-  if (material.includes("實木") || material.includes("原木")) {
-    return `實木控淪陷！這張${shortName}質感拉滿`;
+  if (material.includes("實木") || material.includes("原木")) features.push("實木質感耐用");
+  if (material.includes("絨") || material.includes("羊羔絨")) features.push("絨毛觸感超舒服");
+
+  const hasWheel = selling.includes("滑輪");
+  const isSmall = tagsSet.has("小坪數");
+  const isCheap = price > 0 && price < 1500;
+  const isMidPrice = price >= 1500 && price < 3500;
+
+  const patterns = [];
+  if (hasWheel && isSmall) {
+    patterns.push(`小${sceneLabel || "空間"}沒空間放沙發？這張附輪子的${shortName}全屋滑著走`);
+    patterns.push(`租屋族必看！${shortName}體積小又有輪子，${sceneLabel || "小空間"}一桌一椅剛剛好`);
+    patterns.push(`地板沒地方坐？${shortName}有輪子隨時移動，小${sceneLabel || "空間"}靈活度滿分`);
   }
-  if (material.includes("絨") || material.includes("羊羔絨")) {
-    return `絨毛控必收！坐過${shortName}就回不去了`;
+  if (isSmall && !hasWheel) {
+    patterns.push(`${sceneLabel || "小空間"}救星！${shortName}體積小不佔位，${features.filter(f => !f.includes("滑輪")).slice(0, 1).join("、") || "空間瞬間變大"}`);
   }
-  const scene = String(product.scene || "").toLowerCase();
-  if (tagsSet.has("小坪數")) {
-    const label = scene.includes("臥") ? "臥室" : scene.includes("客") ? "客廳" : "小空間";
-    return `${label}救星！一張${shortName}不佔位超實用`;
+  if (hasWheel && !isSmall) {
+    patterns.push(`一張${shortName}全屋滑著走，書房客廳隨你推`);
+    patterns.push(`移動座位新選擇！${shortName}附滑輪，想坐哪就推到哪`);
   }
-  const price = Number(product.price || 0);
-  if (price > 0 && price < 1500) {
-    return `千元有找！這張${shortName}顏值超高不傷荷包`;
+  if (isCheap) {
+    if (isSmall) patterns.push(`千元有找！${shortName}小${sceneLabel || "空間"}必備，有輪子又有顏值`);
+    else patterns.push(`千元有找！這張${shortName}${features.length > 0 ? features.slice(0, 1) + "、" : ""}高顏值不傷荷包`);
   }
-  const defaults = [
-    `沒想過${shortName}也能這麼美，小預算大升級`,
-    `為了這張${shortName}我換了整个房間風格`,
-    `粉絲狂問的${shortName}連結直接給你`,
-    `一見鍾情的${shortName}質感比照片更好`,
-    `${shortName}開箱！這質感對不起這個價格`,
-    `不藏了！我家${shortName}被問爆的連結在這裡`
-  ];
-  return defaults[index % defaults.length];
+  if (painPoints.length === 0 && features.length === 0) {
+    if (isMidPrice) patterns.push(`這張${shortName}質感比照片更好，難怪一直被問連結`);
+    patterns.push(`沒想過${shortName}也能這麼美，小預算大升級`);
+    patterns.push(`為了這張${shortName}我換了整个房間風格`);
+    patterns.push(`粉絲狂問的${shortName}連結直接給你`);
+    patterns.push(`一見鍾情的${shortName}質感比照片更好`);
+    patterns.push(`不藏了！我家${shortName}被問爆的連結在這裡`);
+  }
+  return patterns[index % patterns.length];
 }
 
 function composeScript(product, tags, format, shortName) {
@@ -4537,32 +4561,53 @@ function composeScript(product, tags, format, shortName) {
   const sceneLabel = scene.includes("臥") ? "臥室" : scene.includes("客") ? "客廳" : (scene || "居家");
   const price = Number(product.price || 0);
   const tagsSet = new Set(tags);
+  const hasWheel = selling.includes("滑輪");
+  const isSmall = tagsSet.has("小坪數");
+  const isCheap = price > 0 && price < 1500;
+
+  function painScenario() {
+    const parts = [];
+    if (isSmall) parts.push(`小${sceneLabel}地板堆滿雜物，想坐都沒地方`);
+    else parts.push(`少了舒適座位，每次回家只能窩在床上`);
+    if (hasWheel) parts.push(`一般的椅子太重不好移動`);
+    return parts.join("，");
+  }
+  function solutionText() {
+    const parts = [shortName];
+    if (isSmall) parts.push("體積小不佔位");
+    if (hasWheel) parts.push("附滑輪可全屋移動");
+    return parts.join("，");
+  }
+  function wheelBenefit() {
+    if (hasWheel) return "從書桌滑到餐桌再推到陽台，一張椅子全屋用";
+    return "放在哪個角落都好看又好坐";
+  }
+  function priceBenefit() {
+    if (isCheap) return `千元有找只要 $${price.toLocaleString()}，小資族無痛入手`;
+    if (price > 0) return `$${price.toLocaleString()} 超高CP值`;
+    return "超值價格，私訊問报价";
+  }
+
   if (format === "reels") {
     const shots = [];
-    if (tagsSet.has("小坪數")) {
-      shots.push(`【Hook】小${sceneLabel}的真實樣貌⋯地板堆滿東西沒地方坐`);
-      shots.push(`【轉折】直到我拿出這張${shortName}`);
-    } else {
-      shots.push(`【Hook】你家${sceneLabel}是不是也少了這個？`);
-      shots.push(`【轉折】${shortName}直接讓空間升級`);
-    }
+    shots.push(`【Hook】${painScenario()}`);
+    shots.push(`【轉折】直到我找到${solutionText()}，瞬間多一個舒適座位`);
     if (selling) shots.push(`【賣點】${selling}（特寫功能細節）`);
-    if (material) shots.push(`【材質】${material}質感近拍，手感Ｑ彈`);
-    if (size) shots.push(`【尺寸】${size}實際對比，剛剛好的比例`);
-    shots.push(`【場景】${shortName}在不同角度的搭配效果`);
-    const pt = price > 0 ? `只要 $${price.toLocaleString()}` : "超值價格";
-    shots.push(`【價格】${pt}，小資族無痛入手`);
+    else if (hasWheel) shots.push(`【賣點】滑輪設計實測：${wheelBenefit()}`);
+    if (material) shots.push(`【材質】${material}質感近拍，手感Ｑ彈細緻`);
+    if (size) shots.push(`【尺寸】${size}實際對比，剛剛好不佔空間`);
+    shots.push(`【場景】${wheelBenefit()}，${sceneLabel || "居家"}風格輕鬆搭配`);
+    shots.push(`【價格】${priceBenefit()}`);
     shots.push(`【CTA】左下角連結傳送門｜留言「+1」拿完整規格`);
     return shots.join(" -> ");
   }
   const slides = [];
-  slides.push(`Slide 1｜封面：${shortName} × ${sceneLabel}情境美圖`);
-  slides.push(`Slide 2｜${shortName}各角度產品全貌`);
+  slides.push(`Slide 1｜封面：${shortName} × ${sceneLabel || "居家"}情境美圖（吸引點擊）`);
+  slides.push(`Slide 2｜產品全貌：${solutionText()}，${wheelBenefit()}`);
   const details = [selling, material, size].filter(Boolean);
   slides.push(`Slide 3｜${details.length > 0 ? "細節：" + details.join("、") : "尺寸規格一覽（資訊圖卡）"}`);
-  const pt2 = price > 0 ? `$${price.toLocaleString()}` : "私訊報價";
-  slides.push(`Slide 4｜價格 ${pt2}｜傳送門在主頁`);
-  slides.push(`Slide 5｜留言「+1」小編私訊你連結`);
+  slides.push(`Slide 4｜價格 ${priceBenefit()}｜傳送門在主頁`);
+  slides.push(`Slide 5｜留言「+1」小編私訊你連結＋搭配建議`);
   return slides.join(" -> ");
 }
 
