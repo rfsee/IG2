@@ -3532,7 +3532,7 @@ function buildImagePrompt(post, product, captionText, products = []) {
 function deriveVisualSteps({ post, captionText, scene, products }) {
   const requirements = splitScriptRequirements(post.script);
   const caption = String(captionText || "");
-  const productNames = products.map((item) => item.name).filter(Boolean).join(" / ") || post.title || "small-space furniture";
+  const productNames = products.map((item) => extractShortProductName(item.name)).filter(Boolean).join(" / ") || "small-space furniture";
   const material = products[0]?.material || "wood/metal";
   const size = products[0]?.size || "small-space fit";
   const selling = products[0]?.selling || "multi-use and space-saving";
@@ -3544,7 +3544,7 @@ function deriveVisualSteps({ post, captionText, scene, products }) {
       return;
     }
 
-    if (/情境|場景|lifestyle/i.test(req)) {
+    if (/情境|場景|lifestyle|場景搭配/i.test(req)) {
       steps.push({
         subject: `${productNames} placed naturally in ${scene}`,
         goal: "show real-life use context in a small apartment",
@@ -3574,12 +3574,43 @@ function deriveVisualSteps({ post, captionText, scene, products }) {
       return;
     }
 
-    if (/多用途|用途|一桌兩用|一物多用|use-case/i.test(req)) {
+    if (/多用途|用途|一桌兩用|一物多用|use-case|賣點|功能/i.test(req)) {
+      const sellPoint = extractSellingPoint(req);
       steps.push({
-        subject: `${productNames} in multiple use contexts, highlight ${selling}`,
+        subject: `${productNames} demonstrating ${sellPoint}`,
         goal: "show one product solving multiple daily needs",
         composition: "same product in two to three home corners, consistent color tone",
         intent: "increase perceived value and conversion motivation"
+      });
+      return;
+    }
+
+    if (/hook|痛點/i.test(req)) {
+      steps.push({
+        subject: `${productNames} in a candid before-moment in ${scene}`,
+        goal: "present a relatable pain point or everyday situation",
+        composition: "natural candid framing, slightly messy but authentic day-in-life",
+        intent: "grab attention with a familiar struggle"
+      });
+      return;
+    }
+
+    if (/轉折|解法/i.test(req)) {
+      steps.push({
+        subject: `${productNames} appearing as the solution in ${scene}`,
+        goal: "contrast the shift from problem to solved",
+        composition: "product introduction shot, clean transition from before to after",
+        intent: "create emotional relief and product desire"
+      });
+      return;
+    }
+
+    if (/價格|價格驚喜/i.test(req)) {
+      steps.push({
+        subject: `${productNames} with clear price tag or value callout`,
+        goal: "state the price clearly to remove purchase friction",
+        composition: "product hero shot with simple price overlay area, clean background",
+        intent: "trigger impulse inquiry from price transparency"
       });
       return;
     }
@@ -3621,6 +3652,12 @@ function deriveVisualSteps({ post, captionText, scene, products }) {
   }
 
   return steps.slice(0, post.type === "feed" ? 6 : 4);
+}
+
+function extractSellingPoint(segment) {
+  const clean = segment.replace(/【[^】]*】/g, "").replace(/\([^)]*\)/g, "").trim();
+  const words = clean.split(/[\s,，、]/).filter(Boolean);
+  return words.slice(0, 5).join(" ") || "key selling point";
 }
 
 function splitScriptRequirements(scriptText) {
