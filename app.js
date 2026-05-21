@@ -2280,6 +2280,16 @@ function syncOnboardingProgressFromCurrentState() {
   const progress = loadOnboardingProgress();
   if (hasConnectedAuthSession()) {
     progress.auth = true;
+    if (brandStrategyPlanState?.id) {
+      progress.brand = true;
+      progress.strategy = true;
+    }
+    if (state.products.length > 0) {
+      progress.products = true;
+    }
+    if (state.posts.length > 0) {
+      progress.plan = true;
+    }
     saveOnboardingProgress(progress);
     return progress;
   }
